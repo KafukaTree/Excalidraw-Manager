@@ -26,6 +26,8 @@ Managed board servers listen only on `127.0.0.1`.
 - Persist one shared Excalidraw library across all managed boards and ports.
 - Import, merge, replace, export, clear, and browse public libraries.
 - Use `list` and `stop-all` from a terminal.
+- Follow the Windows display language automatically or switch between English
+  and Simplified Chinese from the application settings.
 
 ## Supported environment
 
@@ -124,6 +126,18 @@ excalidraw-manager --version
 Be careful with `stop-all`: it also stops compatible `excalidraw-edit`
 processes launched outside this manager.
 
+## Interface language
+
+The default **Follow system** setting uses Simplified Chinese when the Windows
+display language is Chinese and English otherwise. To choose explicitly, open
+**Settings → Interface language** and select **Simplified Chinese** or
+**English**. The manager restarts its interface to apply the change; running
+board services remain open.
+
+The selected value is stored as `Language` in
+`%LOCALAPPDATA%\ExcalidrawManager\settings.json`. The command-line companion
+follows the Windows display language.
+
 ## Local data and backups
 
 User data is stored outside the installation directory:
@@ -154,11 +168,13 @@ package.
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\smoke.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\localization.ps1
 ```
 
 The smoke test creates a temporary board, starts one local Node.js process,
 checks the scene/library/client endpoints, and stops only the PID that it
-created.
+created. The localization test validates Chinese and English strings, language
+preference handling, and version metadata without modifying user settings.
 
 Project layout:
 
