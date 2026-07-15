@@ -1,0 +1,14 @@
+# IDE and build scratch files
+.vs/
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+
+# Local logs and temporary packages
+*.log
+*.tmp
+*.zip
+
+# This project intentionally keeps dist/ as the tested Windows payload.
