@@ -21,8 +21,8 @@ using System.Windows.Forms;
 [assembly: AssemblyDescription("Manage multiple local Excalidraw boards on Windows")]
 [assembly: AssemblyProduct("Excalidraw Manager")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Excalidraw Manager contributors")]
-[assembly: AssemblyVersion("0.1.0.0")]
-[assembly: AssemblyFileVersion("0.1.0.0")]
+[assembly: AssemblyVersion("0.2.0.0")]
+[assembly: AssemblyFileVersion("0.2.0.0")]
 
 namespace ExcalidrawManager
 {
@@ -34,10 +34,11 @@ namespace ExcalidrawManager
         [STAThread]
         private static void Main(string[] args)
         {
+            Localization.Configure("system");
             if (args.Length > 0 && string.Equals(args[0], "stop-all", StringComparison.OrdinalIgnoreCase))
             {
                 int count = ProcessService.StopAllDiscovered();
-                Console.WriteLine("Stopped {0} excalidraw-edit process(es).", count);
+                Console.WriteLine(Localization.F("Stopped {0} excalidraw-edit process(es).", count));
                 return;
             }
 
@@ -50,6 +51,7 @@ namespace ExcalidrawManager
 
             string initialFile = args.Length > 0 && File.Exists(args[0]) ? Path.GetFullPath(args[0]) : null;
             bool ownsMutex;
+            bool restartRequested = false;
             using (var mutex = new Mutex(true, MutexName, out ownsMutex))
             {
                 if (!ownsMutex)
@@ -66,7 +68,9 @@ namespace ExcalidrawManager
                     channel.Start();
                     Application.Run(form);
                 }
+                restartRequested = form.RestartRequested;
             }
+            if (restartRequested) Process.Start(Application.ExecutablePath);
         }
     }
 
@@ -138,6 +142,7 @@ namespace ExcalidrawManager
         public List<string> Roots { get; set; }
         public int StartPort { get; set; }
         public string Theme { get; set; }
+        public string Language { get; set; }
         public bool TrayHintShown { get; set; }
         public List<string> RecentFiles { get; set; }
         public Dictionary<string, string> Aliases { get; set; }
@@ -147,6 +152,7 @@ namespace ExcalidrawManager
             Roots = new List<string>();
             StartPort = 6417;
             Theme = "system";
+            Language = "system";
             RecentFiles = new List<string>();
             Aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
@@ -170,6 +176,7 @@ namespace ExcalidrawManager
                 if (result.Roots == null) result.Roots = new List<string>();
                 if (result.RecentFiles == null) result.RecentFiles = new List<string>();
                 if (result.Aliases == null) result.Aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                result.Language = Localization.NormalizePreference(result.Language);
                 return result;
             }
             catch { return new AppSettings(); }
@@ -188,7 +195,7 @@ namespace ExcalidrawManager
         public int Port { get; set; }
         public string Url { get { return Port > 0 ? "http://localhost:" + Port : ""; } }
         public string FilePath { get; set; }
-        public string FileName { get { return string.IsNullOrEmpty(FilePath) ? "(unknown)" : Path.GetFileName(FilePath); } }
+        public string FileName { get { return string.IsNullOrEmpty(FilePath) ? Localization.T("(unknown)") : Path.GetFileName(FilePath); } }
         public string Alias { get; set; }
         public string DisplayName { get { return string.IsNullOrWhiteSpace(Alias) ? FileName : Alias + " (" + FileName + ")"; } }
         public string Theme { get; set; }
@@ -280,9 +287,9 @@ namespace ExcalidrawManager
             var document = Serializer().DeserializeObject(File.ReadAllText(path, Encoding.UTF8)) as Dictionary<string, object>;
             object raw;
             if (document == null || !document.TryGetValue("libraryItems", out raw))
-                throw new InvalidDataException("Not a valid .excalidrawlib file: libraryItems is missing.");
+                throw new InvalidDataException(Localization.T("Not a valid .excalidrawlib file: libraryItems is missing."));
             var enumerable = raw as IEnumerable;
-            if (enumerable == null) throw new InvalidDataException("Not a valid .excalidrawlib file: libraryItems is not an array.");
+            if (enumerable == null) throw new InvalidDataException(Localization.T("Not a valid .excalidrawlib file: libraryItems is not an array."));
             var items = new List<object>();
             foreach (object item in enumerable) items.Add(item);
             return items;
@@ -320,14 +327,14 @@ namespace ExcalidrawManager
         public static string Describe(object item, int index)
         {
             var fields = item as Dictionary<string, object>;
-            if (fields == null) return "Item " + (index + 1);
+            if (fields == null) return Localization.F("Item {0}", index + 1);
             object id, status, elements;
             string itemId = fields.TryGetValue("id", out id) ? Convert.ToString(id) : "item-" + (index + 1);
             string itemStatus = fields.TryGetValue("status", out status) ? Convert.ToString(status) : "unknown";
             int elementCount = 0;
             var elementList = fields.TryGetValue("elements", out elements) ? elements as IEnumerable : null;
             if (elementList != null) foreach (object ignored in elementList) elementCount++;
-            return itemId + "   [" + itemStatus + ", " + elementCount + " elements]";
+            return itemId + "   [" + Localization.T(itemStatus) + ", " + Localization.F("{0} elements", elementCount) + "]";
         }
     }
 
@@ -357,14 +364,14 @@ namespace ExcalidrawManager
             if (!string.IsNullOrEmpty(_cliPath)) _publicDir = Path.Combine(Path.GetDirectoryName(_cliPath), "public");
             _managedServerPath = Path.Combine(Path.GetDirectoryName(typeof(ProcessService).Assembly.Location), "runtime", "server.mjs");
             if (string.IsNullOrEmpty(_nodePath) || string.IsNullOrEmpty(_cliPath) || !Directory.Exists(_publicDir))
-                throw new InvalidOperationException("Cannot find node.exe or the global excalidraw-edit installation. Run: npm i -g excalidraw-edit");
+                throw new InvalidOperationException(Localization.T("Cannot find node.exe or the global excalidraw-edit installation. Run: npm i -g excalidraw-edit"));
             string packageJson = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(_cliPath)), "package.json");
             Match versionMatch = File.Exists(packageJson) ? Regex.Match(File.ReadAllText(packageJson), "\"version\"\\s*:\\s*\"([^\"]+)\"") : Match.Empty;
             _cliVersion = versionMatch.Success ? versionMatch.Groups[1].Value : "unknown";
             if (!string.Equals(_cliVersion, "0.1.1", StringComparison.Ordinal))
-                throw new InvalidOperationException("This release requires excalidraw-edit 0.1.1, but found " + _cliVersion + ". Run: npm i -g excalidraw-edit@0.1.1");
+                throw new InvalidOperationException(Localization.F("This release requires excalidraw-edit 0.1.1, but found {0}. Run: npm i -g excalidraw-edit@0.1.1", _cliVersion));
             if (!File.Exists(_managedServerPath))
-                throw new InvalidOperationException("Managed Excalidraw runtime is missing: " + _managedServerPath);
+                throw new InvalidOperationException(Localization.F("Managed Excalidraw runtime is missing: {0}", _managedServerPath));
         }
 
         private static string FindOnPath(string name)
@@ -383,7 +390,7 @@ namespace ExcalidrawManager
         {
             var used = new HashSet<int>(IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Select(x => x.Port));
             for (int port = Math.Max(1, start); port <= 65535; port++) if (!used.Contains(port)) return port;
-            throw new InvalidOperationException("No free TCP port is available.");
+            throw new InvalidOperationException(Localization.T("No free TCP port is available."));
         }
 
         public static DrawingInstance Start(string filePath, int requestedPort, string theme)
@@ -392,7 +399,7 @@ namespace ExcalidrawManager
             filePath = Path.GetFullPath(filePath);
             if (!File.Exists(filePath)) CreateEmptyScene(filePath);
             int port = requestedPort > 0 ? requestedPort : FindFreePort(6417);
-            if (FindFreePort(port) != port) throw new InvalidOperationException("Port " + port + " is already in use.");
+            if (FindFreePort(port) != port) throw new InvalidOperationException(Localization.F("Port {0} is already in use.", port));
 
             var psi = new ProcessStartInfo(_nodePath,
                 Quote(_managedServerPath) + " " + Quote(filePath) + " --port " + port + " --theme " + theme +
@@ -403,21 +410,21 @@ namespace ExcalidrawManager
             psi.RedirectStandardError = true;
             psi.WorkingDirectory = Path.GetDirectoryName(filePath);
             var process = Process.Start(psi);
-            if (process == null) throw new InvalidOperationException("Failed to start excalidraw-edit.");
+            if (process == null) throw new InvalidOperationException(Localization.T("Failed to start excalidraw-edit."));
 
             var error = new StringBuilder();
             process.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs e) { if (e.Data != null) error.AppendLine(e.Data); };
             process.BeginErrorReadLine();
             for (int i = 0; i < 50; i++)
             {
-                if (process.HasExited) throw new InvalidOperationException("excalidraw-edit exited: " + error.ToString().Trim());
+                if (process.HasExited) throw new InvalidOperationException(Localization.F("excalidraw-edit exited: {0}", error.ToString().Trim()));
                 if (IsPortListening(port)) break;
                 Thread.Sleep(100);
             }
             if (!IsPortListening(port))
             {
                 try { process.Kill(); } catch { }
-                throw new TimeoutException("excalidraw-edit did not listen on port " + port + " within 5 seconds.");
+                throw new TimeoutException(Localization.F("excalidraw-edit did not listen on port {0} within 5 seconds.", port));
             }
 
             var instance = new DrawingInstance
@@ -541,12 +548,14 @@ namespace ExcalidrawManager
         private readonly ToolStripTextBox _search = new ToolStripTextBox();
         private List<DrawingInstance> _instances = new List<DrawingInstance>();
         private bool _reallyExit;
+        public bool RestartRequested { get; private set; }
 
         public MainForm(string initialFile)
         {
             _initialFile = initialFile;
             _settings = SettingsStore.Load();
-            Text = "Excalidraw Manager";
+            Localization.Configure(_settings.Language);
+            Text = T("Excalidraw Manager");
             MinimumSize = new Size(980, 600);
             Size = new Size(1180, 720);
             StartPosition = FormStartPosition.CenterScreen;
@@ -561,21 +570,21 @@ namespace ExcalidrawManager
         private void BuildUi()
         {
             var tool = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, Padding = new Padding(6, 3, 6, 3) };
-            tool.Items.Add(MakeButton("Add root", delegate { AddRoot(); }));
-            tool.Items.Add(MakeButton("Open file", delegate { OpenFile(); }));
-            tool.Items.Add(MakeButton("New board", delegate { NewBoard(); }));
-            tool.Items.Add(MakeButton("Refresh", delegate { RefreshAll(); }));
+            tool.Items.Add(MakeButton(T("Add root"), delegate { AddRoot(); }));
+            tool.Items.Add(MakeButton(T("Open file"), delegate { OpenFile(); }));
+            tool.Items.Add(MakeButton(T("New board"), delegate { NewBoard(); }));
+            tool.Items.Add(MakeButton(T("Refresh"), delegate { RefreshAll(); }));
             tool.Items.Add(new ToolStripSeparator());
-            tool.Items.Add(new ToolStripLabel("Search:"));
+            tool.Items.Add(new ToolStripLabel(T("Search:")));
             _search.AutoSize = false;
             _search.Width = 180;
-            _search.ToolTipText = "Search all workspace roots; press Enter";
+            _search.ToolTipText = T("Search all workspace roots; press Enter");
             _search.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { SearchFiles(_search.Text); e.SuppressKeyPress = true; } };
             tool.Items.Add(_search);
             tool.Items.Add(new ToolStripSeparator());
-            tool.Items.Add(MakeButton("Settings", delegate { ShowSettings(); }));
-            tool.Items.Add(MakeButton("Libraries", delegate { ShowLibraryManager(); }));
-            tool.Items.Add(MakeButton("Environment", delegate { ShowEnvironment(); }));
+            tool.Items.Add(MakeButton(T("Settings"), delegate { ShowSettings(); }));
+            tool.Items.Add(MakeButton(T("Libraries"), delegate { ShowLibraryManager(); }));
+            tool.Items.Add(MakeButton(T("Environment"), delegate { ShowEnvironment(); }));
             Controls.Add(tool);
 
             var split = new SplitContainer { Dock = DockStyle.Fill, SplitterDistance = 360, Panel1MinSize = 260 };
@@ -589,7 +598,7 @@ namespace ExcalidrawManager
             Controls.Add(split);
             split.BringToFront();
 
-            var leftTitle = new Label { Text = "WORKSPACES", Dock = DockStyle.Top, Height = 26, ForeColor = Color.DimGray };
+            var leftTitle = new Label { Text = T("WORKSPACES"), Dock = DockStyle.Top, Height = 26, ForeColor = Color.DimGray };
             _tree.Dock = DockStyle.Fill;
             _tree.HideSelection = false;
             _tree.ShowNodeToolTips = true;
@@ -600,11 +609,11 @@ namespace ExcalidrawManager
             split.Panel1.Controls.Add(leftTitle);
 
             var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 42, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(0, 7, 0, 0) };
-            actions.Controls.Add(MakeUiButton("Open", delegate { OpenSelected(); }));
-            actions.Controls.Add(MakeUiButton("Copy URL", delegate { CopySelectedUrl(); }));
-            actions.Controls.Add(MakeUiButton("Restart", delegate { RestartSelected(); }));
-            actions.Controls.Add(MakeUiButton("Stop", delegate { StopSelected(); }));
-            actions.Controls.Add(MakeUiButton("Stop all", delegate { StopAll(); }));
+            actions.Controls.Add(MakeUiButton(T("Open"), delegate { OpenSelected(); }));
+            actions.Controls.Add(MakeUiButton(T("Copy URL"), delegate { CopySelectedUrl(); }));
+            actions.Controls.Add(MakeUiButton(T("Restart"), delegate { RestartSelected(); }));
+            actions.Controls.Add(MakeUiButton(T("Stop"), delegate { StopSelected(); }));
+            actions.Controls.Add(MakeUiButton(T("Stop all"), delegate { StopAll(); }));
 
             _status.Dock = DockStyle.Bottom;
             _status.Height = 24;
@@ -612,7 +621,7 @@ namespace ExcalidrawManager
             _status.TextAlign = ContentAlignment.MiddleLeft;
 
             ConfigureGrid();
-            var rightTitle = new Label { Text = "RUNNING INSTANCES", Dock = DockStyle.Top, Height = 26, ForeColor = Color.DimGray };
+            var rightTitle = new Label { Text = T("RUNNING INSTANCES"), Dock = DockStyle.Top, Height = 26, ForeColor = Color.DimGray };
             split.Panel2.Controls.Add(_grid);
             split.Panel2.Controls.Add(actions);
             split.Panel2.Controls.Add(_status);
@@ -631,13 +640,13 @@ namespace ExcalidrawManager
             _grid.AutoGenerateColumns = false;
             _grid.RowHeadersVisible = false;
             _grid.BackgroundColor = SystemColors.Window;
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "File", DataPropertyName = "DisplayName", Width = 165 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = T("File"), DataPropertyName = "DisplayName", Width = 165 });
             _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "PID", DataPropertyName = "Pid", Width = 65 });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Port", DataPropertyName = "Port", Width = 60 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = T("Port"), DataPropertyName = "Port", Width = 60 });
             _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "URL", DataPropertyName = "Url", Width = 145 });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Source", DataPropertyName = "Source", Width = 75 });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Theme", DataPropertyName = "Theme", Width = 70 });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Started", DataPropertyName = "StartedAt", Width = 125, DefaultCellStyle = new DataGridViewCellStyle { Format = "MM-dd HH:mm:ss" } });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = T("Source"), DataPropertyName = "Source", Width = 75 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = T("Theme"), DataPropertyName = "Theme", Width = 70 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = T("Started"), DataPropertyName = "StartedAt", Width = 125, DefaultCellStyle = new DataGridViewCellStyle { Format = "MM-dd HH:mm:ss" } });
             _grid.CellDoubleClick += delegate { OpenSelected(); };
             _grid.CellFormatting += delegate(object sender, DataGridViewCellFormattingEventArgs e)
             {
@@ -646,20 +655,21 @@ namespace ExcalidrawManager
                 var item = row.DataBoundItem as DrawingInstance;
                 if (item == null || row.Cells.Count == 0) return;
                 row.Cells[0].ToolTipText = item.FilePath + "\r\n" + item.CommandLine;
+                if (e.ColumnIndex == 4 || e.ColumnIndex == 5) { e.Value = T(Convert.ToString(e.Value)); e.FormattingApplied = true; }
             };
         }
 
         private void BuildTray()
         {
             _tray.Icon = Icon ?? SystemIcons.Application;
-            _tray.Text = "Excalidraw Manager";
+            _tray.Text = T("Excalidraw Manager");
             _tray.Visible = true;
             _tray.DoubleClick += delegate { RestoreWindow(); };
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Show", null, delegate { RestoreWindow(); });
-            menu.Items.Add("Stop all services", null, delegate { StopAll(); });
+            menu.Items.Add(T("Show"), null, delegate { RestoreWindow(); });
+            menu.Items.Add(T("Stop all services"), null, delegate { StopAll(); });
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Exit...", null, delegate { ExitFromTray(); });
+            menu.Items.Add(T("Exit..."), null, delegate { ExitFromTray(); });
             _tray.ContextMenuStrip = menu;
         }
 
@@ -680,7 +690,7 @@ namespace ExcalidrawManager
             Hide();
             if (!_settings.TrayHintShown)
             {
-                _tray.ShowBalloonTip(2500, "Excalidraw Manager", "Still running in the system tray. Use Exit there to close it.", ToolTipIcon.Info);
+                _tray.ShowBalloonTip(2500, T("Excalidraw Manager"), T("Still running in the system tray. Use Exit there to close it."), ToolTipIcon.Info);
                 _settings.TrayHintShown = true;
                 SettingsStore.Save(_settings);
             }
@@ -689,8 +699,8 @@ namespace ExcalidrawManager
         private void ExitFromTray()
         {
             var answer = MessageBox.Show(
-                "Yes: stop all excalidraw-edit services and exit.\r\nNo: keep services running and exit.\r\nCancel: return to the tray.",
-                "Exit Excalidraw Manager", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                T("Yes: stop all excalidraw-edit services and exit.\r\nNo: keep services running and exit.\r\nCancel: return to the tray."),
+                T("Exit Excalidraw Manager"), MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
             if (answer == DialogResult.Cancel) return;
             if (answer == DialogResult.Yes) ProcessService.StopAllDiscovered();
             _reallyExit = true;
@@ -714,7 +724,7 @@ namespace ExcalidrawManager
         private void LoadRoots()
         {
             _tree.Nodes.Clear();
-            var recent = new TreeNode("Recent boards") { Name = "__recent" };
+            var recent = new TreeNode(T("Recent boards")) { Name = "__recent" };
             foreach (string file in _settings.RecentFiles.Where(File.Exists).Take(20)) recent.Nodes.Add(MakeFileNode(file));
             if (recent.Nodes.Count > 0) { _tree.Nodes.Add(recent); recent.Expand(); }
             foreach (string root in _settings.Roots.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase)) AddRootNode(root);
@@ -723,7 +733,7 @@ namespace ExcalidrawManager
         private void AddRootNode(string root)
         {
             var node = new TreeNode(Path.GetFileName(root.TrimEnd(Path.DirectorySeparatorChar)) + "  [" + root + "]") { Tag = root, ToolTipText = root };
-            node.Nodes.Add(new TreeNode("Loading..."));
+            node.Nodes.Add(new TreeNode(T("Loading...")));
             _tree.Nodes.Add(node);
         }
 
@@ -737,7 +747,7 @@ namespace ExcalidrawManager
                 foreach (string dir in Directory.GetDirectories(path).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
                 {
                     var child = new TreeNode(Path.GetFileName(dir)) { Tag = dir, ToolTipText = dir };
-                    child.Nodes.Add(new TreeNode("Loading..."));
+                    child.Nodes.Add(new TreeNode(T("Loading...")));
                     node.Nodes.Add(child);
                 }
                 foreach (string file in Directory.GetFiles(path, "*.excalidraw").OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
@@ -745,7 +755,7 @@ namespace ExcalidrawManager
                     node.Nodes.Add(MakeFileNode(file));
                 }
             }
-            catch (Exception ex) { node.Nodes.Add(new TreeNode("Access failed: " + ex.Message)); }
+            catch (Exception ex) { node.Nodes.Add(new TreeNode(F("Access failed: {0}", ex.Message))); }
         }
 
         private void TreeBeforeExpand(object sender, TreeViewCancelEventArgs e) { PopulateDirectory(e.Node); }
@@ -769,28 +779,28 @@ namespace ExcalidrawManager
             var menu = new ContextMenuStrip();
             if (Directory.Exists(path))
             {
-                menu.Items.Add("New board here", null, delegate { NewBoard(path); });
-                menu.Items.Add("New folder...", null, delegate { NewFolder(path); });
-                menu.Items.Add("Refresh", null, delegate { PopulateDirectory(e.Node); });
-                menu.Items.Add("Open in Explorer", null, delegate { OpenExplorer(path); });
-                if (_settings.Roots.Any(x => SamePath(x, path))) menu.Items.Add("Remove root", null, delegate { RemoveRoot(path); });
+                menu.Items.Add(T("New board here"), null, delegate { NewBoard(path); });
+                menu.Items.Add(T("New folder..."), null, delegate { NewFolder(path); });
+                menu.Items.Add(T("Refresh"), null, delegate { PopulateDirectory(e.Node); });
+                menu.Items.Add(T("Open in Explorer"), null, delegate { OpenExplorer(path); });
+                if (_settings.Roots.Any(x => SamePath(x, path))) menu.Items.Add(T("Remove root"), null, delegate { RemoveRoot(path); });
             }
             else if (File.Exists(path))
             {
-                menu.Items.Add("Start / Open", null, delegate { TreeDoubleClick(sender, e); });
-                menu.Items.Add("Start with port...", null, delegate { StartWithPort(path); });
-                menu.Items.Add("Force new instance", null, delegate { StartFileAsync(path, true, 0, true); });
-                menu.Items.Add("Set alias...", null, delegate { SetAlias(path); });
-                menu.Items.Add("Rename...", null, delegate { RenameBoard(path); });
-                menu.Items.Add("Copy path", null, delegate { Clipboard.SetText(path); });
-                menu.Items.Add("Show in Explorer", null, delegate { Process.Start("explorer.exe", "/select,\"" + path + "\""); });
+                menu.Items.Add(T("Start / Open"), null, delegate { TreeDoubleClick(sender, e); });
+                menu.Items.Add(T("Start with port..."), null, delegate { StartWithPort(path); });
+                menu.Items.Add(T("Force new instance"), null, delegate { StartFileAsync(path, true, 0, true); });
+                menu.Items.Add(T("Set alias..."), null, delegate { SetAlias(path); });
+                menu.Items.Add(T("Rename..."), null, delegate { RenameBoard(path); });
+                menu.Items.Add(T("Copy path"), null, delegate { Clipboard.SetText(path); });
+                menu.Items.Add(T("Show in Explorer"), null, delegate { Process.Start("explorer.exe", "/select,\"" + path + "\""); });
             }
             menu.Show(_tree, e.Location);
         }
 
         private void AddRoot()
         {
-            using (var dialog = new FolderBrowserDialog { Description = "Choose a folder containing .excalidraw boards", ShowNewFolderButton = true })
+            using (var dialog = new FolderBrowserDialog { Description = T("Choose a folder containing .excalidraw boards"), ShowNewFolderButton = true })
             {
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
                 if (!_settings.Roots.Any(x => SamePath(x, dialog.SelectedPath))) _settings.Roots.Add(dialog.SelectedPath);
@@ -801,7 +811,7 @@ namespace ExcalidrawManager
 
         private void OpenFile()
         {
-            using (var dialog = new OpenFileDialog { Title = "Open Excalidraw board", Filter = "Excalidraw board (*.excalidraw)|*.excalidraw", Multiselect = false })
+            using (var dialog = new OpenFileDialog { Title = T("Open Excalidraw board"), Filter = T("Excalidraw board (*.excalidraw)|*.excalidraw"), Multiselect = false })
             {
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
                 RememberRecent(dialog.FileName);
@@ -830,7 +840,7 @@ namespace ExcalidrawManager
         {
             using (var dialog = new SaveFileDialog
             {
-                Title = "Create Excalidraw board", Filter = "Excalidraw board (*.excalidraw)|*.excalidraw",
+                Title = T("Create Excalidraw board"), Filter = T("Excalidraw board (*.excalidraw)|*.excalidraw"),
                 AddExtension = true, DefaultExt = "excalidraw", InitialDirectory = directory
             })
             {
@@ -840,17 +850,17 @@ namespace ExcalidrawManager
                     ProcessService.CreateEmptyScene(dialog.FileName);
                     RememberRecent(dialog.FileName);
                     RefreshAll();
-                    if (MessageBox.Show("Board created. Start it now?", "New board", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                    if (MessageBox.Show(T("Board created. Start it now?"), T("New board"), MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                         StartFileAsync(dialog.FileName, true, 0);
                 }
-                catch (IOException) { MessageBox.Show("The file already exists.", "New board", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+                catch (IOException) { MessageBox.Show(T("The file already exists."), T("New board"), MessageBoxButtons.OK, MessageBoxIcon.Warning); }
                 catch (Exception ex) { ShowError(ex); }
             }
         }
 
         private void NewFolder(string parent)
         {
-            string name = Prompt.Show("Folder name:", "New folder", "New Folder");
+            string name = Prompt.Show(T("Folder name:"), T("New folder"), T("New Folder"));
             if (string.IsNullOrWhiteSpace(name)) return;
             try { Directory.CreateDirectory(Path.Combine(parent, name.Trim())); RefreshAll(); }
             catch (Exception ex) { ShowError(ex); }
@@ -862,7 +872,7 @@ namespace ExcalidrawManager
             string alias;
             string label = _settings.Aliases.TryGetValue(Path.GetFullPath(file), out alias) && !string.IsNullOrWhiteSpace(alias)
                 ? alias + "  (" + Path.GetFileName(file) + ")" : Path.GetFileName(file);
-            var child = new TreeNode((running ? "● " : "○ ") + label) { Tag = file, ToolTipText = file };
+            var child = new TreeNode((running ? "\u25cf " : "\u25cb ") + label) { Tag = file, ToolTipText = file };
             child.ForeColor = running ? Color.SeaGreen : SystemColors.WindowText;
             return child;
         }
@@ -881,7 +891,7 @@ namespace ExcalidrawManager
             string full = Path.GetFullPath(path);
             string existing;
             _settings.Aliases.TryGetValue(full, out existing);
-            string alias = Prompt.Show("Display alias (leave blank to clear):", "Board alias", existing ?? "");
+            string alias = Prompt.Show(T("Display alias (leave blank to clear):"), T("Board alias"), existing ?? "");
             if (alias == null) return;
             if (string.IsNullOrWhiteSpace(alias)) _settings.Aliases.Remove(full); else _settings.Aliases[full] = alias.Trim();
             SettingsStore.Save(_settings); RefreshAll();
@@ -891,9 +901,9 @@ namespace ExcalidrawManager
         {
             if (_instances.Any(x => SamePath(x.FilePath, path)))
             {
-                MessageBox.Show("Stop this board before renaming it.", "Rename", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
+                MessageBox.Show(T("Stop this board before renaming it."), T("Rename"), MessageBoxButtons.OK, MessageBoxIcon.Information); return;
             }
-            string name = Prompt.Show("New file name:", "Rename board", Path.GetFileName(path));
+            string name = Prompt.Show(T("New file name:"), T("Rename board"), Path.GetFileName(path));
             if (string.IsNullOrWhiteSpace(name)) return;
             if (!name.EndsWith(".excalidraw", StringComparison.OrdinalIgnoreCase)) name += ".excalidraw";
             string target = Path.Combine(Path.GetDirectoryName(path), name);
@@ -919,7 +929,7 @@ namespace ExcalidrawManager
                 var results = new List<string>();
                 foreach (string root in _settings.Roots.Where(Directory.Exists)) FindFilesRecursive(root, query, results, 500);
                 _tree.Nodes.Clear();
-                var node = new TreeNode("Search results: " + query + "  (" + results.Count + ")");
+                var node = new TreeNode(F("Search results: {0}  ({1})", query, results.Count));
                 foreach (string file in results) node.Nodes.Add(MakeFileNode(file));
                 _tree.Nodes.Add(node); node.Expand();
             }
@@ -943,7 +953,7 @@ namespace ExcalidrawManager
 
         private void StartWithPort(string path)
         {
-            string text = Prompt.Show("TCP port:", "Start with port", ProcessService.FindFreePort(_settings.StartPort).ToString());
+            string text = Prompt.Show(T("TCP port:"), T("Start with port"), ProcessService.FindFreePort(_settings.StartPort).ToString());
             int port;
             if (int.TryParse(text, out port) && port > 0 && port <= 65535) StartFileAsync(path, true, port, true);
         }
@@ -954,15 +964,15 @@ namespace ExcalidrawManager
             {
                 var existing = _instances.FirstOrDefault(x => SamePath(x.FilePath, path));
                 if (existing != null && !force) { if (open) OpenUrl(existing.Url); return; }
-                _status.Text = "Starting " + Path.GetFileName(path) + "...";
+                _status.Text = F("Starting {0}...", Path.GetFileName(path));
                 int target = port > 0 ? port : ProcessService.FindFreePort(_settings.StartPort);
                 var instance = await Task.Run(() => ProcessService.Start(path, target, _settings.Theme));
                 RememberRecent(path);
                 RefreshInstances();
-                _status.Text = "Started PID " + instance.Pid + " on port " + instance.Port;
+                _status.Text = F("Started PID {0} on port {1}", instance.Pid, instance.Port);
                 if (open) OpenUrl(instance.Url);
             }
-            catch (Exception ex) { ShowError(ex); _status.Text = "Start failed"; }
+            catch (Exception ex) { ShowError(ex); _status.Text = T("Start failed"); }
         }
 
         private void StartFileAsync(string path, bool open, int port) { StartFileAsync(path, open, port, false); }
@@ -979,7 +989,7 @@ namespace ExcalidrawManager
         {
             var item = SelectedInstance();
             if (item == null) return;
-            _status.Text = "Stopping PID " + item.Pid + " (brief save grace period)...";
+            _status.Text = F("Stopping PID {0} (brief save grace period)...", item.Pid);
             await Task.Run(() => ProcessService.Stop(item.Pid));
             RefreshAll();
         }
@@ -987,10 +997,10 @@ namespace ExcalidrawManager
         private async void StopAll()
         {
             if (_instances.Count == 0) return;
-            if (MessageBox.Show("Stop all discovered excalidraw-edit Node processes?", "Stop all", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-            _status.Text = "Stopping all services...";
+            if (MessageBox.Show(T("Stop all discovered excalidraw-edit Node processes?"), T("Stop all"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            _status.Text = T("Stopping all services...");
             int count = await Task.Run(() => ProcessService.StopAllDiscovered());
-            _status.Text = "Stopped " + count + " service(s)";
+            _status.Text = F("Stopped {0} service(s)", count);
             RefreshAll();
         }
 
@@ -999,7 +1009,7 @@ namespace ExcalidrawManager
             var item = SelectedInstance();
             if (item == null || string.IsNullOrEmpty(item.FilePath) || !File.Exists(item.FilePath)) return;
             string file = item.FilePath; int port = item.Port; string theme = item.Theme;
-            _status.Text = "Restarting PID " + item.Pid + "...";
+            _status.Text = F("Restarting PID {0}...", item.Pid);
             await Task.Run(() => ProcessService.Stop(item.Pid));
             try { await Task.Run(() => ProcessService.Start(file, port, theme)); RefreshAll(); OpenUrl("http://localhost:" + port); }
             catch (Exception ex) { ShowError(ex); RefreshAll(); }
@@ -1027,10 +1037,10 @@ namespace ExcalidrawManager
                 _grid.DataSource = null;
                 _grid.DataSource = _instances;
                 foreach (DataGridViewRow row in _grid.Rows) if (((DrawingInstance)row.DataBoundItem).Pid == selectedPid) { row.Selected = true; _grid.CurrentCell = row.Cells[0]; }
-                _status.Text = _instances.Count + " running instance(s)";
+                _status.Text = F("{0} running instance(s)", _instances.Count);
                 RebuildTrayInstances();
             }
-            catch (Exception ex) { _status.Text = "Refresh failed: " + ex.Message; }
+            catch (Exception ex) { _status.Text = F("Refresh failed: {0}", ex.Message); }
         }
 
         private void ResolveExternalPaths()
@@ -1065,7 +1075,7 @@ namespace ExcalidrawManager
             foreach (var instance in _instances.Take(12))
             {
                 var captured = instance;
-                menu.Items.Insert(at++, new ToolStripMenuItem("Open " + instance.FileName + "  :" + instance.Port, null, delegate { OpenUrl(captured.Url); }));
+                menu.Items.Insert(at++, new ToolStripMenuItem(F("Open {0}  :{1}", instance.FileName, instance.Port), null, delegate { OpenUrl(captured.Url); }));
             }
         }
 
@@ -1074,18 +1084,18 @@ namespace ExcalidrawManager
             try
             {
                 string nodeVersion = RunAndRead(ProcessService.NodePath, "--version").Trim();
-                MessageBox.Show("node.exe\r\n" + ProcessService.NodePath + "\r\nVersion: " + nodeVersion + "\r\n\r\nexcalidraw-edit\r\n" + ProcessService.CliPath + "\r\nVersion: " + ProcessService.CliVersion + "\r\n\r\nManaged runtime\r\n" + ProcessService.ManagedServerPath + "\r\n\r\nShared library\r\n" + SettingsStore.SharedLibraryPath + "\r\n\r\nSettings\r\n" + SettingsStore.FilePath,
-                    "Environment", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("node.exe\r\n" + ProcessService.NodePath + "\r\n" + T("Version:") + " " + nodeVersion + "\r\n\r\nexcalidraw-edit\r\n" + ProcessService.CliPath + "\r\n" + T("Version:") + " " + ProcessService.CliVersion + "\r\n\r\n" + T("Managed runtime") + "\r\n" + ProcessService.ManagedServerPath + "\r\n\r\n" + T("Shared library") + "\r\n" + SettingsStore.SharedLibraryPath + "\r\n\r\n" + T("Settings") + "\r\n" + SettingsStore.FilePath,
+                    T("Environment"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex) { ShowError(ex); }
         }
 
         private void ShowLibraryManager()
         {
-            using (var form = new Form { Width = 760, Height = 530, Text = "Excalidraw Libraries", StartPosition = FormStartPosition.CenterParent, MinimumSize = new Size(620, 420) })
+            using (var form = new Form { Width = 760, Height = 530, Text = T("Excalidraw Libraries"), StartPosition = FormStartPosition.CenterParent, MinimumSize = new Size(620, 420) })
             {
                 try { form.Icon = Icon; } catch { }
-                var title = new Label { Dock = DockStyle.Top, Height = 28, Text = "SHARED LOCAL LIBRARY", ForeColor = Color.DimGray };
+                var title = new Label { Dock = DockStyle.Top, Height = 28, Text = T("SHARED LOCAL LIBRARY"), ForeColor = Color.DimGray };
                 var path = new TextBox { Dock = DockStyle.Top, Height = 24, ReadOnly = true, Text = SettingsStore.SharedLibraryPath };
                 var summary = new Label { Dock = DockStyle.Top, Height = 28, TextAlign = ContentAlignment.MiddleLeft };
                 var list = new ListBox { Dock = DockStyle.Fill, HorizontalScrollbar = true };
@@ -1100,37 +1110,37 @@ namespace ExcalidrawManager
                         lastLibraryWrite = File.Exists(SettingsStore.SharedLibraryPath) ? File.GetLastWriteTimeUtc(SettingsStore.SharedLibraryPath) : DateTime.MinValue;
                         list.Items.Clear();
                         for (int i = 0; i < items.Count; i++) list.Items.Add(LibraryStore.Describe(items[i], i));
-                        summary.Text = items.Count + " library item(s). Changes made in managed boards are saved here automatically.";
+                        summary.Text = F("{0} library item(s). Changes made in managed boards are saved here automatically.", items.Count);
                     }
-                    catch (Exception ex) { summary.Text = "Load failed: " + ex.Message; }
+                    catch (Exception ex) { summary.Text = F("Load failed: {0}", ex.Message); }
                 };
 
-                var import = MakeUiButton("Import / Merge...", delegate
+                var import = MakeUiButton(T("Import / Merge..."), delegate
                 {
-                    using (var dialog = new OpenFileDialog { Filter = "Excalidraw library (*.excalidrawlib)|*.excalidrawlib|JSON (*.json)|*.json", Multiselect = false })
+                    using (var dialog = new OpenFileDialog { Filter = T("Excalidraw library (*.excalidrawlib)|*.excalidrawlib|JSON (*.json)|*.json"), Multiselect = false })
                     {
                         if (dialog.ShowDialog(form) != DialogResult.OK) return;
                         try
                         {
                             int count = LibraryStore.MergeFrom(dialog.FileName); reload();
-                            MessageBox.Show(count + " item(s) are now stored locally. Refresh already-open board tabs to load the updated library.", "Library imported", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            MessageBox.Show(F("{0} item(s) are now stored locally. Refresh already-open board tabs to load the updated library.", count), T("Library imported"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                         }
                         catch (Exception ex) { ShowError(ex); }
                     }
                 });
-                var replace = MakeUiButton("Replace...", delegate
+                var replace = MakeUiButton(T("Replace..."), delegate
                 {
-                    using (var dialog = new OpenFileDialog { Filter = "Excalidraw library (*.excalidrawlib)|*.excalidrawlib|JSON (*.json)|*.json", Multiselect = false })
+                    using (var dialog = new OpenFileDialog { Filter = T("Excalidraw library (*.excalidrawlib)|*.excalidrawlib|JSON (*.json)|*.json"), Multiselect = false })
                     {
                         if (dialog.ShowDialog(form) != DialogResult.OK) return;
-                        if (MessageBox.Show("Replace the complete shared local library?", "Replace library", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                        if (MessageBox.Show(T("Replace the complete shared local library?"), T("Replace library"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
                         try { LibraryStore.Save(SettingsStore.SharedLibraryPath, LibraryStore.Load(dialog.FileName)); reload(); }
                         catch (Exception ex) { ShowError(ex); }
                     }
                 });
-                var export = MakeUiButton("Export...", delegate
+                var export = MakeUiButton(T("Export..."), delegate
                 {
-                    using (var dialog = new SaveFileDialog { Filter = "Excalidraw library (*.excalidrawlib)|*.excalidrawlib", AddExtension = true, DefaultExt = "excalidrawlib", FileName = "shared.excalidrawlib" })
+                    using (var dialog = new SaveFileDialog { Filter = T("Excalidraw library (*.excalidrawlib)|*.excalidrawlib"), AddExtension = true, DefaultExt = "excalidrawlib", FileName = "shared.excalidrawlib" })
                     {
                         if (dialog.ShowDialog(form) != DialogResult.OK) return;
                         try
@@ -1141,21 +1151,21 @@ namespace ExcalidrawManager
                         catch (Exception ex) { ShowError(ex); }
                     }
                 });
-                var browse = MakeUiButton("Browse via active board", delegate
+                var browse = MakeUiButton(T("Browse via active board"), delegate
                 {
                     var active = SelectedInstance() ?? _instances.FirstOrDefault();
                     if (active == null || string.IsNullOrEmpty(active.Url))
                     {
-                        MessageBox.Show("Start a board first. Public libraries must be opened from a running board so Excalidraw can generate the secure return token.", "Browse libraries", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        MessageBox.Show(T("Start a board first. Public libraries must be opened from a running board so Excalidraw can generate the secure return token."), T("Browse libraries"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                         return;
                     }
                     OpenUrl(active.Url);
-                    MessageBox.Show("In the board, open the Library panel and click 'Browse libraries'.\r\nChoose a library on the website, then click 'Add to Excalidraw'. It will return to this local board and be saved automatically.", "Install a public library", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(T("In the board, open the Library panel and click 'Browse libraries'.\r\nChoose a library on the website, then click 'Add to Excalidraw'. It will return to this local board and be saved automatically."), T("Install a public library"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 });
-                var folder = MakeUiButton("Open local folder", delegate { Directory.CreateDirectory(SettingsStore.LibraryDirectory); OpenExplorer(SettingsStore.LibraryDirectory); });
-                var clear = MakeUiButton("Clear", delegate
+                var folder = MakeUiButton(T("Open local folder"), delegate { Directory.CreateDirectory(SettingsStore.LibraryDirectory); OpenExplorer(SettingsStore.LibraryDirectory); });
+                var clear = MakeUiButton(T("Clear"), delegate
                 {
-                    if (MessageBox.Show("Clear every item from the shared local library?\r\nOpen board tabs must be refreshed afterward.", "Clear library", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    if (MessageBox.Show(T("Clear every item from the shared local library?\r\nOpen board tabs must be refreshed afterward."), T("Clear library"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
                     try { LibraryStore.Save(SettingsStore.SharedLibraryPath, new object[0]); reload(); }
                     catch (Exception ex) { ShowError(ex); }
                 });
@@ -1174,20 +1184,41 @@ namespace ExcalidrawManager
 
         private void ShowSettings()
         {
-            using (var form = new Form { Width = 390, Height = 220, Text = "Settings", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false })
+            bool restartForLanguage = false;
+            string selectedLanguage = _settings.Language;
+            using (var form = new Form { Width = 440, Height = 270, Text = T("Settings"), StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false })
             {
-                var portLabel = new Label { Left = 18, Top = 22, Width = 130, Text = "Starting port:" };
-                var port = new NumericUpDown { Left = 155, Top = 18, Width = 190, Minimum = 1, Maximum = 65535, Value = Math.Max(1, Math.Min(65535, _settings.StartPort)) };
-                var themeLabel = new Label { Left = 18, Top = 62, Width = 130, Text = "Board theme:" };
-                var theme = new ComboBox { Left = 155, Top = 58, Width = 190, DropDownStyle = ComboBoxStyle.DropDownList };
-                theme.Items.AddRange(new object[] { "system", "dark", "light" }); theme.SelectedItem = _settings.Theme;
-                var ok = new Button { Text = "Save", Left = 190, Top = 115, Width = 75, DialogResult = DialogResult.OK };
-                var cancel = new Button { Text = "Cancel", Left = 272, Top = 115, Width = 75, DialogResult = DialogResult.Cancel };
-                form.Controls.AddRange(new Control[] { portLabel, port, themeLabel, theme, ok, cancel }); form.AcceptButton = ok; form.CancelButton = cancel;
+                var portLabel = new Label { Left = 18, Top = 22, Width = 150, Text = T("Starting port:") };
+                var port = new NumericUpDown { Left = 175, Top = 18, Width = 220, Minimum = 1, Maximum = 65535, Value = Math.Max(1, Math.Min(65535, _settings.StartPort)) };
+                var themeLabel = new Label { Left = 18, Top = 62, Width = 150, Text = T("Board theme:") };
+                var theme = new ComboBox { Left = 175, Top = 58, Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
+                var themeChoices = new[] { new LocalizedChoice("system", T("system")), new LocalizedChoice("dark", T("dark")), new LocalizedChoice("light", T("light")) };
+                theme.Items.AddRange(themeChoices); theme.SelectedItem = themeChoices.FirstOrDefault(x => x.Value == _settings.Theme) ?? themeChoices[0];
+                var languageLabel = new Label { Left = 18, Top = 102, Width = 150, Text = T("Interface language:") };
+                var language = new ComboBox { Left = 175, Top = 98, Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
+                var languageChoices = new[] { new LocalizedChoice("system", T("Follow system")), new LocalizedChoice("zh-CN", T("Simplified Chinese")), new LocalizedChoice("en", T("English")) };
+                language.Items.AddRange(languageChoices); language.SelectedItem = languageChoices.FirstOrDefault(x => x.Value == _settings.Language) ?? languageChoices[0];
+                var ok = new Button { Text = T("Save"), Left = 235, Top = 155, Width = 75, DialogResult = DialogResult.OK };
+                var cancel = new Button { Text = T("Cancel"), Left = 318, Top = 155, Width = 75, DialogResult = DialogResult.Cancel };
+                form.Controls.AddRange(new Control[] { portLabel, port, themeLabel, theme, languageLabel, language, ok, cancel }); form.AcceptButton = ok; form.CancelButton = cancel;
                 if (form.ShowDialog(this) == DialogResult.OK)
                 {
-                    _settings.StartPort = (int)port.Value; _settings.Theme = Convert.ToString(theme.SelectedItem) ?? "system"; SettingsStore.Save(_settings);
+                    _settings.StartPort = (int)port.Value;
+                    _settings.Theme = ((LocalizedChoice)theme.SelectedItem).Value;
+                    selectedLanguage = ((LocalizedChoice)language.SelectedItem).Value;
+                    restartForLanguage = !string.Equals(selectedLanguage, _settings.Language, StringComparison.OrdinalIgnoreCase);
+                    _settings.Language = selectedLanguage;
+                    SettingsStore.Save(_settings);
                 }
+            }
+            if (restartForLanguage)
+            {
+                Localization.Configure(selectedLanguage);
+                MessageBox.Show(T("The interface will restart to apply the new language. Running board services will stay open."), T("Language changed"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                RestartRequested = true;
+                _reallyExit = true;
+                _tray.Visible = false;
+                Close();
             }
         }
 
@@ -1205,7 +1236,10 @@ namespace ExcalidrawManager
             try { return string.Equals(Path.GetFullPath(a).TrimEnd('\\'), Path.GetFullPath(b).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase); }
             catch { return false; }
         }
-        private static void ShowError(Exception ex) { MessageBox.Show(ex.Message, "Excalidraw Manager", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        private static void ShowError(Exception ex) { MessageBox.Show(ex.Message, T("Excalidraw Manager"), MessageBoxButtons.OK, MessageBoxIcon.Error); }
+
+        private static string T(string text) { return Localization.T(text); }
+        private static string F(string text, params object[] args) { return Localization.F(text, args); }
 
         private static ToolStripButton MakeButton(string text, EventHandler click) { var b = new ToolStripButton(text); b.Click += click; return b; }
         private static Button MakeUiButton(string text, EventHandler click) { var b = new Button { Text = text, AutoSize = true, Height = 28 }; b.Click += click; return b; }
@@ -1219,8 +1253,8 @@ namespace ExcalidrawManager
             {
                 var label = new Label { Left = 12, Top = 12, Width = 395, Text = text };
                 var input = new TextBox { Left = 12, Top = 36, Width = 395, Text = value };
-                var ok = new Button { Text = "OK", Left = 250, Width = 75, Top = 72, DialogResult = DialogResult.OK };
-                var cancel = new Button { Text = "Cancel", Left = 332, Width = 75, Top = 72, DialogResult = DialogResult.Cancel };
+                var ok = new Button { Text = Localization.T("OK"), Left = 250, Width = 75, Top = 72, DialogResult = DialogResult.OK };
+                var cancel = new Button { Text = Localization.T("Cancel"), Left = 332, Width = 75, Top = 72, DialogResult = DialogResult.Cancel };
                 form.Controls.AddRange(new Control[] { label, input, ok, cancel });
                 form.AcceptButton = ok; form.CancelButton = cancel;
                 return form.ShowDialog() == DialogResult.OK ? input.Text : null;

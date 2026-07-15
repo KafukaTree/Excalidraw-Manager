@@ -25,6 +25,7 @@ WinForms 图形界面、进程控制、系统托盘以及跨画板共享的本�
 - 所有受管理画板和端口共用一个本地 Excalidraw 素材库。
 - 支持素材库合并导入、替换、导出、清空及浏览官方公共素材库。
 - 提供 `list` 和 `stop-all` 命令行操作。
+- 默认跟随 Windows 显示语言，也可以在设置中手动切换简体中文或 English。
 
 ## 支持的环境
 
@@ -119,6 +120,16 @@ excalidraw-manager --version
 请谨慎使用 `stop-all`：它也会停止不是由本软件启动、但能被识别的
 `excalidraw-edit` 进程。
 
+## 界面语言
+
+默认的 **跟随系统** 选项会在 Windows 显示语言为中文时使用简体中文，否则使用
+English。也可以打开 **设置 → 界面语言**，明确选择 **简体中文** 或
+**English**。切换后管理器会自动重启界面，但正在运行的画板服务不会停止。
+
+所选值以 `Language` 字段保存在
+`%LOCALAPPDATA%\ExcalidrawManager\settings.json` 中。命令行工具会跟随 Windows
+显示语言。
+
 ## 本地数据与备份
 
 用户数据不会放在安装目录中：
@@ -146,10 +157,12 @@ excalidraw-manager --version
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\smoke.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\localization.ps1
 ```
 
 冒烟测试会创建一个临时画板，启动一个本地 Node.js 进程，检查画板、素材库和
-客户端端点，最后只停止它自己创建的 PID。
+客户端端点，最后只停止它自己创建的 PID。本地化测试会在不修改用户设置的情况
+下验证中英文词条、语言偏好处理和版本信息。
 
 项目结构：
 

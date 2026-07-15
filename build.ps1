@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $source = Join-Path $root 'src\Program.cs'
+$localizationSource = Join-Path $root 'src\Localization.cs'
 $output = Join-Path $root 'dist\ExcalidrawManager.exe'
 $cliOutput = Join-Path $root 'dist\ExcalidrawManager.Cli.exe'
 $icon = Join-Path $root 'assets\app-icon.ico'
@@ -25,19 +26,21 @@ if (-not $patchedText.Contains('onLibraryChange:saveManagedLibrary') -or -not $p
 }
 Copy-Item -Force (Join-Path $root 'runtime\server.mjs') (Join-Path $runtimeOutput 'server.mjs')
 
-& $csc /nologo /target:winexe /optimize+ /win32icon:$icon /out:$output `
+& $csc /nologo /target:winexe /optimize+ /codepage:65001 /win32icon:$icon /out:$output `
     /reference:System.dll `
     /reference:System.Core.dll `
     /reference:System.Drawing.dll `
     /reference:System.Management.dll `
     /reference:System.Web.Extensions.dll `
     /reference:System.Windows.Forms.dll `
+    $localizationSource `
     $source
 
 if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
-& $csc /nologo /target:exe /optimize+ /out:$cliOutput `
+& $csc /nologo /target:exe /optimize+ /codepage:65001 /out:$cliOutput `
     /reference:System.dll `
     /reference:System.Management.dll `
+    $localizationSource `
     (Join-Path $root 'src\Cli.cs')
 if ($LASTEXITCODE -ne 0) { throw "CLI build failed with exit code $LASTEXITCODE" }
 Write-Host "Built $output"
