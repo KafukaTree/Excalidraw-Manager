@@ -27,6 +27,24 @@ WinForms 图形界面、进程控制、系统托盘以及跨画板共享的本�
 - 提供 `list` 和 `stop-all` 命令行操作。
 - 默认跟随 Windows 显示语言，也可以在设置中手动切换简体中文或 English。
 
+## 界面预览
+
+### 管理器界面
+
+在一个 Windows 桌面窗口中统一管理本地画板、端口和运行中的服务。
+
+<p align="center">
+  <img src="assets/screenshots/manager.png" alt="Excalidraw Manager 简体中文界面" width="960">
+</p>
+
+### Excalidraw 笔记编辑
+
+在浏览器中打开受管理的本地画板，并使用完整的 Excalidraw 画布进行编辑。
+
+<p align="center">
+  <img src="assets/screenshots/excalidraw-note.gif" alt="在 Excalidraw 中编辑本地笔记" width="1200">
+</p>
+
 ## 支持的环境
 
 | 组件 | 要求 |
