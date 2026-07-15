@@ -1,0 +1,260 @@
+# Instincts generated from https://github.com/KafukaTree/Excalidraw-Manager
+# Generated: 2026-07-15T04:08:06.860Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: Excalidraw-Manager-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Commit Length
+
+## Action
+
+Keep commit messages concise (~34 characters)
+
+## Evidence
+
+- Average commit message length: 34 chars
+- Based on 1 commits
+
+---
+id: Excalidraw-Manager-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Naming Files
+
+## Action
+
+Use PascalCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: PascalCase
+
+---
+id: Excalidraw-Manager-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: Excalidraw-Manager-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: Excalidraw-Manager-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: excalidraw-manager-instinct-file-naming
+trigger: "When creating a new source file"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Instinct File Naming
+
+## Action
+
+Name the file using PascalCase
+
+## Evidence
+
+- Pattern in namingConventions.files: PascalCase
+
+---
+id: excalidraw-manager-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Pattern in namingConventions.classes: PascalCase
+
+---
+id: excalidraw-manager-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Instinct Function Naming
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.functions: camelCase
+
+---
+id: excalidraw-manager-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Instinct Constant Naming
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE
+
+## Evidence
+
+- Pattern in namingConventions.constants: SCREAMING_SNAKE_CASE
+
+---
+id: excalidraw-manager-instinct-import-style
+trigger: "When importing modules or files"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in importStyle: relative
+
+---
+id: excalidraw-manager-instinct-export-style
+trigger: "When exporting modules or functions"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: excalidraw-manager-instinct-test-location
+trigger: "When adding new tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Instinct Test Location
+
+## Action
+
+Place test files in the separate 'tests' folder
+
+## Evidence
+
+- Pattern in folderStructure.testLocation: separate
+- Common folder: tests
+
+---
+id: excalidraw-manager-instinct-commit-message-format
+trigger: "When writing a commit message"
+confidence: 0.8
+domain: git
+source: repo-analysis
+source_repo: KafukaTree/Excalidraw-Manager
+---
+
+# Excalidraw Manager Instinct Commit Message Format
+
+## Action
+
+Write a short, freeform message without a prefix
+
+## Evidence
+
+- Pattern in commits.type: freeform
+- No prefixes in commit examples
+
