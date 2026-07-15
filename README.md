@@ -29,6 +29,26 @@ Managed board servers listen only on `127.0.0.1`.
 - Follow the Windows display language automatically or switch between English
   and Simplified Chinese from the application settings.
 
+## Screenshots
+
+### Manager interface
+
+Manage local boards, ports, and running services from one Windows desktop
+window.
+
+<p align="center">
+  <img src="assets/screenshots/manager.png" alt="Excalidraw Manager interface in Simplified Chinese" width="960">
+</p>
+
+### Excalidraw note editing
+
+Open each managed board in the browser and edit it with the full Excalidraw
+canvas.
+
+<p align="center">
+  <img src="assets/screenshots/excalidraw-note.gif" alt="Editing a local note in Excalidraw" width="1200">
+</p>
+
 ## Supported environment
 
 | Component | Requirement |
