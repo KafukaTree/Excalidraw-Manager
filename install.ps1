@@ -16,7 +16,19 @@ $payload = @(
     (Join-Path $root 'dist\ExcalidrawManager.exe'),
     (Join-Path $root 'dist\ExcalidrawManager.Cli.exe'),
     (Join-Path $root 'dist\runtime\main.js'),
-    (Join-Path $root 'dist\runtime\server.mjs')
+    (Join-Path $root 'dist\runtime\server.mjs'),
+    (Join-Path $root 'dist\runtime\formula-server.mjs'),
+    (Join-Path $root 'dist\runtime\formula-provider-registry.mjs'),
+    (Join-Path $root 'dist\runtime\formula-editor\index.html'),
+    (Join-Path $root 'dist\runtime\formula-editor\app.mjs'),
+    (Join-Path $root 'dist\runtime\formula-editor\styles.css'),
+    (Join-Path $root 'dist\runtime\formula-editor\templates.mjs'),
+    (Join-Path $root 'dist\runtime\formula-editor\vendor\versions.json'),
+    (Join-Path $root 'dist\runtime\formula-editor\vendor\mathlive\mathlive.min.mjs'),
+    (Join-Path $root 'dist\runtime\formula-editor\vendor\mathlive\mathlive-fonts.css'),
+    (Join-Path $root 'dist\runtime\formula-editor\vendor\mathlive\fonts\KaTeX_Main-Regular.woff2'),
+    (Join-Path $root 'dist\runtime\formula-editor\vendor\mathjax\tex-mml-svg.js'),
+    (Join-Path $root 'dist\runtime\formula-editor\vendor\mathjax\svg\dynamic\math.js')
 )
 foreach ($file in $payload) {
     if (-not (Test-Path -LiteralPath $file)) { throw "Installation payload is missing: $file" }

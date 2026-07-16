@@ -10,5 +10,7 @@ TestResults/
 *.log
 *.tmp
 *.zip
+.tmp/
+node_modules/
 
 # This project intentionally keeps dist/ as the tested Windows payload.

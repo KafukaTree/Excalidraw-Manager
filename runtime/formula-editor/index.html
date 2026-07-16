@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Offline LaTeX formula editor for Excalidraw Manager">
+  <title>公式编辑器 · Excalidraw Manager</title>
+  <link rel="stylesheet" href="/vendor/mathlive/mathlive-fonts.css">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">∑</span>
+      <div>
+        <h1 data-i18n="appTitle">本地公式编辑器</h1>
+        <p data-i18n="appSubtitle">LaTeX 编辑、实时预览与离线导出</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span class="privacy-badge" title="All editing and rendering stays on this computer">
+        <span aria-hidden="true">●</span> <span data-i18n="offlineBadge">完全本地</span>
+      </span>
+      <label class="compact-field">
+        <span class="sr-only" data-i18n="language">语言</span>
+        <select id="language-select" aria-label="Language">
+          <option value="zh-CN">简体中文</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+      <button id="theme-button" class="icon-button" type="button" aria-label="Theme" title="Theme">◐</button>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <section class="card input-card" aria-labelledby="input-title">
+      <div class="card-heading">
+        <div>
+          <h2 id="input-title"><span aria-hidden="true">✎</span> <span data-i18n="inputTitle">输入区域</span></h2>
+          <p data-i18n="inputHint">直接键入 LaTeX，或用可视化编辑器和模板快速构建公式。</p>
+        </div>
+        <button id="keyboard-button" class="secondary-button" type="button">
+          <span aria-hidden="true">⌨</span> <span data-i18n="keyboard">数学键盘</span>
+        </button>
+      </div>
+
+      <div class="feature-tabs" role="tablist" aria-label="Input tools">
+        <button class="feature-tab active" type="button" role="tab" aria-selected="true" data-panel="quick" data-i18n="quickTools">快捷工具</button>
+        <button class="feature-tab" type="button" role="tab" aria-selected="false" data-panel="templates" data-i18n="formulaTemplates">公式模板</button>
+        <button class="feature-tab" type="button" role="tab" aria-selected="false" data-panel="image" data-i18n="imageRecognition">图片识别</button>
+        <button class="feature-tab" type="button" role="tab" aria-selected="false" data-panel="document" data-i18n="documentRecognition">文档识别</button>
+      </div>
+
+      <div id="quick-panel" class="feature-panel" role="tabpanel">
+        <div id="quick-groups" class="tool-groups"></div>
+      </div>
+
+      <div id="templates-panel" class="feature-panel hidden" role="tabpanel">
+        <div class="template-layout">
+          <nav id="template-categories" class="template-categories" aria-label="Template categories"></nav>
+          <div id="template-grid" class="template-grid"></div>
+        </div>
+      </div>
+
+      <div id="image-panel" class="feature-panel hidden recognition-panel" role="tabpanel">
+        <div class="model-notice">
+          <div class="notice-icon" aria-hidden="true">◇</div>
+          <div>
+            <strong data-i18n="modelNotInstalled">尚未安装公式识别模型</strong>
+            <p data-i18n="modelOptional">模型是可选组件。键盘编辑、渲染和所有导出功能已经可以离线使用。</p>
+          </div>
+          <span class="status-pill" data-i18n="interfaceReady">接口已就绪</span>
+        </div>
+        <div id="image-dropzone" class="dropzone" tabindex="0" role="button">
+          <div class="drop-icon" aria-hidden="true">▧</div>
+          <strong data-i18n="dropImage">拖入、粘贴或选择公式截图</strong>
+          <span data-i18n="imageTypes">支持 PNG、JPG、WebP；图片只在本机处理</span>
+          <button class="secondary-button" type="button" data-file-trigger="image" data-i18n="chooseImage">选择图片</button>
+          <input id="image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+        </div>
+        <div id="image-staging" class="staging hidden">
+          <img id="image-preview" alt="Selected formula">
+          <div>
+            <strong id="image-name"></strong>
+            <p id="image-meta"></p>
+            <button id="remove-image" class="text-button" type="button" data-i18n="remove">移除</button>
+          </div>
+        </div>
+        <div id="recognition-actions" class="recognition-actions hidden">
+          <label>
+            <span data-i18n="modelProvider">识别模型</span>
+            <select id="provider-select"></select>
+          </label>
+          <button id="recognize-button" class="primary-button" type="button" disabled>
+            <span aria-hidden="true">⌁</span> <span data-i18n="recognizeFormula">识别公式</span>
+          </button>
+        </div>
+        <div id="candidate-list" class="candidate-list hidden" aria-live="polite"></div>
+      </div>
+
+      <div id="document-panel" class="feature-panel hidden recognition-panel" role="tabpanel">
+        <div class="model-notice">
+          <div class="notice-icon" aria-hidden="true">▤</div>
+          <div>
+            <strong data-i18n="documentAdapter">文档识别适配器已预留</strong>
+            <p data-i18n="documentOptional">后续可接入页面分割、公式定位和批量识别模型，而不改变编辑器。</p>
+          </div>
+          <span class="status-pill" data-i18n="interfaceReady">接口已就绪</span>
+        </div>
+        <div class="document-roadmap">
+          <div><span>1</span><strong data-i18n="importPages">导入页面</strong><small>PDF / PNG / JPG</small></div>
+          <div><span>2</span><strong data-i18n="detectFormulas">定位公式</strong><small data-i18n="replaceableModel">可替换模型</small></div>
+          <div><span>3</span><strong data-i18n="reviewExport">校对与导出</strong><small>LaTeX / SVG / PNG</small></div>
+        </div>
+      </div>
+
+      <div class="edit-toolbar" aria-label="Formula formatting">
+        <div class="toolbar-group">
+          <button id="undo-button" class="icon-button" type="button" title="Undo" aria-label="Undo">↶</button>
+          <button id="redo-button" class="icon-button" type="button" title="Redo" aria-label="Redo">↷</button>
+        </div>
+        <label class="toolbar-control color-control">
+          <span data-i18n="color">颜色</span>
+          <input id="color-input" type="color" value="#1b1f2a">
+        </label>
+        <label class="toolbar-control">
+          <span class="sr-only" data-i18n="font">字体</span>
+          <select id="font-select">
+            <option value="" data-i18n="defaultFont">默认字体</option>
+            <option value="mathrm">Roman</option>
+            <option value="mathsf">Sans Serif</option>
+            <option value="mathtt">Monospace</option>
+            <option value="mathcal">Calligraphic</option>
+            <option value="mathbf">Bold</option>
+          </select>
+        </label>
+        <label class="toolbar-control">
+          <span class="sr-only" data-i18n="environment">环境</span>
+          <select id="environment-select">
+            <option value="" data-i18n="environment">环境</option>
+            <option value="aligned">aligned</option>
+            <option value="cases">cases</option>
+            <option value="matrix">matrix</option>
+            <option value="pmatrix">pmatrix</option>
+            <option value="bmatrix">bmatrix</option>
+            <option value="vmatrix">vmatrix</option>
+          </select>
+        </label>
+        <button id="clear-button" class="danger-text-button" type="button"><span aria-hidden="true">⌫</span> <span data-i18n="clear">清空</span></button>
+        <div class="mode-switch" role="group" aria-label="Editing mode">
+          <button class="active" type="button" data-edit-mode="source" data-i18n="sourceMode">源码</button>
+          <button type="button" data-edit-mode="visual" data-i18n="visualMode">可视化</button>
+        </div>
+      </div>
+
+      <div class="editor-shell">
+        <div id="source-editor-wrap" class="editor-pane">
+          <label for="latex-source" data-i18n="latexSource">LaTeX 源码</label>
+          <textarea id="latex-source" spellcheck="false" autocomplete="off" aria-describedby="source-help" placeholder="例如：\frac{-b \pm \sqrt{b^2-4ac}}{2a}"></textarea>
+          <div class="editor-footer">
+            <span id="source-help" data-i18n="sourceHelp">Ctrl + Enter 立即渲染 · 自动保存草稿</span>
+            <span id="character-count">0</span>
+          </div>
+        </div>
+        <div id="visual-editor-wrap" class="editor-pane hidden">
+          <label for="math-field" data-i18n="visualEditor">可视化公式</label>
+          <math-field id="math-field" virtual-keyboard-mode="manual" smart-mode smart-fence aria-label="Visual formula editor"></math-field>
+          <div class="editor-footer">
+            <span data-i18n="visualHelp">点击公式后，可使用方向键、Tab 和数学键盘编辑。</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card output-card" aria-labelledby="output-title">
+      <div class="card-heading output-heading">
+        <div>
+          <h2 id="output-title"><span aria-hidden="true">↓</span> <span data-i18n="outputTitle">输出区域</span></h2>
+          <p id="render-status" role="status" data-i18n="ready">准备就绪</p>
+        </div>
+        <div class="zoom-control" role="group" aria-label="Preview zoom">
+          <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+          <output id="zoom-value">100%</output>
+          <button id="zoom-in" type="button" aria-label="Zoom in">＋</button>
+        </div>
+      </div>
+
+      <div id="preview-stage" class="preview-stage">
+        <div id="preview-placeholder" class="preview-placeholder">
+          <span aria-hidden="true">LaTeX</span>
+          <p data-i18n="previewHint">输入公式后将在这里实时渲染</p>
+        </div>
+        <div id="math-preview" class="math-preview hidden" aria-live="polite"></div>
+        <div id="measurement-host" aria-hidden="true"></div>
+      </div>
+
+      <div class="export-bar">
+        <div class="export-options">
+          <label>
+            <span data-i18n="scale">倍率</span>
+            <select id="export-scale">
+              <option value="1">1×</option>
+              <option value="2" selected>2×</option>
+              <option value="3">3×</option>
+              <option value="4">4×</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="background">背景</span>
+            <select id="background-select">
+              <option value="transparent" data-i18n="transparent">透明</option>
+              <option value="#ffffff" data-i18n="white">白色</option>
+              <option value="#111827" data-i18n="dark">深色</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="fileName">文件名</span>
+            <input id="filename-input" type="text" value="formula" maxlength="80">
+          </label>
+        </div>
+        <div class="export-actions">
+          <button id="copy-png" class="primary-button" type="button"><span aria-hidden="true">▣</span> <span data-i18n="copyPng">复制 PNG</span></button>
+          <div class="split-export">
+            <button id="download-main" class="secondary-button" type="button"><span data-i18n="downloadSvg">下载 SVG</span></button>
+            <button id="download-menu-button" class="secondary-button split-toggle" type="button" aria-haspopup="menu" aria-expanded="false">▾</button>
+            <div id="download-menu" class="download-menu hidden" role="menu">
+              <button type="button" role="menuitem" data-download="svg">SVG</button>
+              <button type="button" role="menuitem" data-download="png">PNG</button>
+              <button type="button" role="menuitem" data-download="jpg">JPG</button>
+              <button type="button" role="menuitem" data-download="tex">LaTeX (.tex)</button>
+            </div>
+          </div>
+          <button id="board-button" class="secondary-button hidden" type="button"><span aria-hidden="true">↗</span> <span data-i18n="copyOpenBoard">复制并打开画板</span></button>
+        </div>
+      </div>
+
+      <div class="code-output">
+        <div class="code-tabs" role="tablist" aria-label="Text output formats">
+          <button class="active" type="button" data-format="latex">LaTeX</button>
+          <button type="button" data-format="markdown-inline">Markdown inline</button>
+          <button type="button" data-format="markdown-block">Markdown block</button>
+          <button type="button" data-format="mathml">MathML</button>
+          <button type="button" data-format="asciimath">AsciiMath</button>
+          <button type="button" data-format="typst">Typst</button>
+          <button type="button" data-format="svg">SVG Code</button>
+        </div>
+        <div class="code-box">
+          <textarea id="code-value" readonly spellcheck="false"></textarea>
+          <button id="copy-code" class="copy-code-button" type="button" data-i18n="copyCode">复制代码</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Excalidraw Manager</span>
+    <span>·</span>
+    <span data-i18n="localPrivacy">公式和图片不会离开这台电脑</span>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

@@ -24,6 +24,9 @@ WinForms 图形界面、进程控制、系统托盘以及跨画板共享的本�
 - 单实例运行；再次启动时会激活原窗口并转交画板路径。
 - 所有受管理画板和端口共用一个本地 Excalidraw 素材库。
 - 支持素材库合并导入、替换、导出、清空及浏览官方公共素材库。
+- 可从工具栏或系统托盘打开本地公式编辑器。
+- 支持键盘输入 LaTeX 并实时预览，也可使用 MathLive 进行可视化编辑。
+- 提供常用公式模板，无需在线渲染服务即可导出公式。
 - 提供 `list` 和 `stop-all` 命令行操作。
 - 默认跟随 Windows 显示语言，也可以在设置中手动切换简体中文或 English。
 
@@ -64,6 +67,9 @@ Node.js 和 `excalidraw-edit` 属于外部前置依赖，不会打包进 EXE 或
 它们可以安装在自定义位置，但 `node.exe` 和 `excalidraw-edit.cmd` 必须能从
 `PATH` 中找到。
 
+公式编辑器的运行时已捆绑 MathLive 0.110.0 和 MathJax 4.1.3，无需全局安装，
+编辑和渲染公式也不需要联网。
+
 ## 从源码快速安装
 
 1. 安装 Node.js，然后重新打开一个 **新的** PowerShell 窗口。
@@ -101,13 +107,15 @@ Node.js 和 `excalidraw-edit` 属于外部前置依赖，不会打包进 EXE 或
 
 ## 安装预编译包
 
-如果下载的发布包已经包含下列四个经过测试的文件，可以跳过本地编译：
+如果下载的发布包已经包含下列经过测试的文件和目录，可以跳过本地编译：
 
 ```text
 dist\ExcalidrawManager.exe
 dist\ExcalidrawManager.Cli.exe
 dist\runtime\main.js
 dist\runtime\server.mjs
+dist\runtime\formula-server.mjs
+dist\runtime\formula-editor\
 ```
 
 先安装 Node.js 和 `excalidraw-edit@0.1.1`，然后运行：
@@ -137,6 +145,49 @@ excalidraw-manager --version
 
 请谨慎使用 `stop-all`：它也会停止不是由本软件启动、但能被识别的
 `excalidraw-edit` 进程。
+
+## 本地公式编辑器（0.3.0）
+
+点击管理器工具栏或系统托盘菜单中的 **公式编辑器**。管理器会启动一个仅绑定
+`127.0.0.1` 的服务，并在默认浏览器中打开编辑器。页面默认进入源码模式且焦点
+位于 LaTeX 输入区，打开后可以立即用键盘输入；需要辅助输入时可切换到 MathLive
+可视化编辑，两种模式都会同步更新预览。
+
+预览由随软件捆绑的 MathJax 完全离线渲染。模板面板包含常用符号、希腊字母、
+分式与根式、极限、三角函数、积分、求和、括号、矩阵、箭头、集合等常用结构。
+
+编辑器支持：
+
+- 复制 LaTeX、行内或块级 Markdown、MathML、AsciiMath、Typst 和 SVG code。
+- 导出 SVG、透明或带背景的 PNG、JPG 以及 `.tex` 文件。
+- 将渲染后的公式复制为 PNG，方便粘贴到笔记中。
+- 复制后打开管理器中当前选中的画板，再通过 `Ctrl+V` 将图片粘贴到
+  Excalidraw。
+
+**图片识别**和**文档识别**页面已经作为后续 OCR 实验的接入界面保留，但
+0.3.0 **没有捆绑或安装 OCR 模型**，配置兼容的本地 provider 前识别功能保持
+禁用。后续可通过统一接口添加
+或更换 provider，接口约定见[公式识别 Provider API](docs/formula-model-api.md)。
+因此即使没有配置模型，键盘编辑和全部导出功能仍可正常使用。
+
+需要接入本地实验 Provider 时，创建
+`%LOCALAPPDATA%\ExcalidrawManager\formula-providers.json`：
+
+```json
+{
+  "providers": [
+    {
+      "id": "my-formula-model",
+      "baseUrl": "http://127.0.0.1:17861",
+      "enabled": true
+    }
+  ]
+}
+```
+
+适配层只接受本机回环 HTTP 地址。若 Provider 需要 Bearer token，可通过
+`tokenEnv` 填写继承的环境变量名；不要把 token 本身写进配置文件。图片识别页会
+通过 `/v1/info` 发现 Provider，无需修改界面即可启用识别。
 
 ## 界面语言
 
@@ -176,23 +227,27 @@ English。也可以打开 **设置 → 界面语言**，明确选择 **简体中
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\smoke.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\localization.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\formula-editor.ps1
 ```
 
 冒烟测试会创建一个临时画板，启动一个本地 Node.js 进程，检查画板、素材库和
 客户端端点，最后只停止它自己创建的 PID。本地化测试会在不修改用户设置的情况
-下验证中英文词条、语言偏好处理和版本信息。
+下验证中英文词条、语言偏好处理和版本信息。公式编辑器测试会在不安装 OCR 模型
+的情况下检查本地编辑器服务、捆绑的浏览器资源、安全边界和公式编辑器 API。
 
 项目结构：
 
 ```text
-assets/                  应用图标源文件
-dist/                    已测试的 Windows 运行文件
-runtime/                 本地 HTTP 运行时及浏览器客户端补丁器
-src/                     WinForms 图形界面和命令行启动器
-tests/                   PowerShell 冒烟测试
-build.ps1                本地可复现构建脚本
-check-environment.ps1    前置依赖诊断脚本
-install.ps1              当前用户安装脚本
+assets/                         应用图标源文件
+docs/formula-model-api.md       可替换的 OCR provider 接口约定
+dist/                           已测试的 Windows 运行文件
+runtime/                        本地 HTTP 运行时及浏览器客户端补丁器
+runtime/formula-editor/         公式编辑器界面及捆绑的数学渲染资源
+src/                            WinForms 图形界面和命令行启动器
+tests/                          PowerShell 集成测试
+build.ps1                       本地可复现构建脚本
+check-environment.ps1           前置依赖诊断脚本
+install.ps1                     当前用户安装脚本
 ```
 
 ## 常见问题
@@ -249,13 +304,15 @@ npm install --global excalidraw-edit@0.1.1
 身份认证、权限控制、TLS 和请求防护，否则不要把运行时改成监听公网或局域网地址。
 
 正常编辑本地画板不依赖在线服务。安装 npm 前置依赖，以及用户主动导入官方公共
-素材库时，需要访问网络。
+素材库时，需要访问网络。捆绑的公式编辑器在本地渲染，不会上传公式或图片。
+未来配置第三方识别 provider 时，其网络和隐私行为可能不同，请在使用前自行确认。
 
 ## 参与贡献
 
 请保持对 Windows PowerShell 5.1 和系统内置 .NET Framework 编译器的兼容性。
-提交拉取请求前运行 `build.ps1` 和 `tests\smoke.ps1`，不要提交个人画板或本地
-设置文件。
+提交拉取请求前运行 `build.ps1`、`tests\smoke.ps1`、
+`tests\localization.ps1` 和 `tests\formula-editor.ps1`，不要提交个人画板或
+本地设置文件。
 
 ## 许可证
 

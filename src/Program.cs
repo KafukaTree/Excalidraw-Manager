@@ -21,8 +21,8 @@ using System.Windows.Forms;
 [assembly: AssemblyDescription("Manage multiple local Excalidraw boards on Windows")]
 [assembly: AssemblyProduct("Excalidraw Manager")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Excalidraw Manager contributors")]
-[assembly: AssemblyVersion("0.2.0.0")]
-[assembly: AssemblyFileVersion("0.2.0.0")]
+[assembly: AssemblyVersion("0.3.0.0")]
+[assembly: AssemblyFileVersion("0.3.0.0")]
 
 namespace ExcalidrawManager
 {
@@ -458,7 +458,9 @@ namespace ExcalidrawManager
                     {
                         string command = Convert.ToString(row["CommandLine"]);
                         bool standardRuntime = command.IndexOf("excalidraw-edit", StringComparison.OrdinalIgnoreCase) >= 0;
-                        bool managedRuntime = command.IndexOf("ExcalidrawManager", StringComparison.OrdinalIgnoreCase) >= 0 && command.IndexOf("server.mjs", StringComparison.OrdinalIgnoreCase) >= 0;
+                        bool managedRuntime = command.IndexOf("ExcalidrawManager", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                            command.IndexOf("server.mjs", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                            command.IndexOf("formula-server.mjs", StringComparison.OrdinalIgnoreCase) < 0;
                         if (!standardRuntime && !managedRuntime) continue;
                         int pid = Convert.ToInt32((uint)row["ProcessId"]);
                         var args = SplitCommandLine(command);
@@ -536,6 +538,192 @@ namespace ExcalidrawManager
         }
     }
 
+    public static class FormulaEditorService
+    {
+        private const int PreferredPort = 6517;
+        private static readonly object Sync = new object();
+        private static Process _process;
+        private static int _port;
+
+        public static string EnsureStarted(string language, string boardUrl)
+        {
+            string normalizedLanguage = string.Equals(language, "zh-CN", StringComparison.OrdinalIgnoreCase) ? "zh-CN" : "en";
+            string normalizedBoardUrl = NormalizeBoardUrl(boardUrl);
+
+            lock (Sync)
+            {
+                if (!IsTrackedProcessReady())
+                {
+                    DropTrackedProcess();
+                    Start(normalizedLanguage, normalizedBoardUrl);
+                }
+                return BuildEditorUrl(_port, normalizedLanguage, normalizedBoardUrl);
+            }
+        }
+
+        public static void OpenInDefaultBrowser(string url)
+        {
+            Uri uri;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out uri) ||
+                !string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+                !uri.IsLoopback || !string.IsNullOrEmpty(uri.UserInfo))
+                throw new InvalidOperationException(Localization.T("Refusing to open a non-local formula editor URL."));
+
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+        }
+
+        public static void Stop()
+        {
+            Process process;
+            lock (Sync)
+            {
+                process = _process;
+                _process = null;
+                _port = 0;
+            }
+
+            if (process == null) return;
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill();
+                    process.WaitForExit(3000);
+                }
+            }
+            catch { }
+            finally { try { process.Dispose(); } catch { } }
+        }
+
+        private static void Start(string language, string boardUrl)
+        {
+            string runtimeDirectory = Path.Combine(Path.GetDirectoryName(typeof(FormulaEditorService).Assembly.Location), "runtime");
+            string serverPath = Path.Combine(runtimeDirectory, "formula-server.mjs");
+            string assetsPath = Path.Combine(runtimeDirectory, "formula-editor");
+            if (!File.Exists(serverPath))
+                throw new InvalidOperationException(Localization.F("Formula editor runtime is missing: {0}", serverPath));
+            if (!File.Exists(Path.Combine(assetsPath, "index.html")))
+                throw new InvalidOperationException(Localization.F("Formula editor assets are missing: {0}", assetsPath));
+
+            int port = ProcessService.FindFreePort(PreferredPort);
+            var arguments = new StringBuilder();
+            arguments.Append(Quote(serverPath));
+            arguments.Append(" --port ").Append(port);
+            arguments.Append(" --host 127.0.0.1");
+            arguments.Append(" --assets ").Append(Quote(assetsPath));
+            arguments.Append(" --parent-pid ").Append(Process.GetCurrentProcess().Id);
+            arguments.Append(" --lang ").Append(language);
+            if (!string.IsNullOrEmpty(boardUrl)) arguments.Append(" --board-url ").Append(Quote(boardUrl));
+
+            var psi = new ProcessStartInfo(ProcessService.NodePath, arguments.ToString())
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = runtimeDirectory
+            };
+            var process = Process.Start(psi);
+            if (process == null) throw new InvalidOperationException(Localization.T("Failed to start formula editor."));
+
+            var error = new StringBuilder();
+            process.OutputDataReceived += delegate { };
+            process.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs e)
+            {
+                if (e.Data == null) return;
+                lock (error) error.AppendLine(e.Data);
+            };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            bool ready = false;
+            var startupTimer = Stopwatch.StartNew();
+            while (startupTimer.Elapsed < TimeSpan.FromSeconds(8))
+            {
+                if (process.HasExited) break;
+                if (IsHttpReady(port)) { ready = true; break; }
+                Thread.Sleep(100);
+            }
+            if (!ready)
+            {
+                string detail;
+                lock (error) detail = error.ToString().Trim();
+                bool exited = process.HasExited;
+                try { if (!exited) process.Kill(); } catch { }
+                try { process.Dispose(); } catch { }
+                if (exited)
+                    throw new InvalidOperationException(Localization.F("Formula editor exited: {0}", detail));
+                throw new TimeoutException(Localization.T("Formula editor did not start within 8 seconds."));
+            }
+
+            _process = process;
+            _port = port;
+            process.Exited += delegate
+            {
+                lock (Sync)
+                {
+                    if (ReferenceEquals(_process, process))
+                    {
+                        _process = null;
+                        _port = 0;
+                    }
+                }
+                try { process.Dispose(); } catch { }
+            };
+            process.EnableRaisingEvents = true;
+        }
+
+        private static bool IsTrackedProcessReady()
+        {
+            try { return _process != null && !_process.HasExited && _port > 0 && IsHttpReady(_port); }
+            catch { return false; }
+        }
+
+        private static void DropTrackedProcess()
+        {
+            var process = _process;
+            _process = null;
+            _port = 0;
+            if (process == null) return;
+            try { if (!process.HasExited) process.Kill(); } catch { }
+            try { process.Dispose(); } catch { }
+        }
+
+        private static bool IsHttpReady(int port)
+        {
+            try
+            {
+                var request = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:" + port + "/api/status");
+                request.Method = "GET";
+                request.Proxy = null;
+                request.AllowAutoRedirect = false;
+                request.Timeout = 300;
+                request.ReadWriteTimeout = 300;
+                using (var response = (HttpWebResponse)request.GetResponse())
+                    return response.StatusCode == HttpStatusCode.OK;
+            }
+            catch { return false; }
+        }
+
+        private static string NormalizeBoardUrl(string boardUrl)
+        {
+            Uri uri;
+            if (string.IsNullOrWhiteSpace(boardUrl) || !Uri.TryCreate(boardUrl, UriKind.Absolute, out uri)) return null;
+            if (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+                !uri.IsLoopback || !string.IsNullOrEmpty(uri.UserInfo)) return null;
+            return uri.AbsoluteUri;
+        }
+
+        private static string BuildEditorUrl(int port, string language, string boardUrl)
+        {
+            string url = "http://127.0.0.1:" + port + "/?lang=" + Uri.EscapeDataString(language);
+            if (!string.IsNullOrEmpty(boardUrl)) url += "&board=" + Uri.EscapeDataString(boardUrl);
+            return url;
+        }
+
+        private static string Quote(string value) { return "\"" + value.Replace("\"", "\\\"") + "\""; }
+    }
+
     public sealed class MainForm : Form
     {
         private readonly AppSettings _settings;
@@ -565,6 +753,12 @@ namespace ExcalidrawManager
             BuildTray();
             Load += OnLoaded;
             FormClosing += OnFormClosing;
+            FormClosed += delegate
+            {
+                _refreshTimer.Stop();
+                FormulaEditorService.Stop();
+                _tray.Dispose();
+            };
         }
 
         private void BuildUi()
@@ -573,6 +767,7 @@ namespace ExcalidrawManager
             tool.Items.Add(MakeButton(T("Add root"), delegate { AddRoot(); }));
             tool.Items.Add(MakeButton(T("Open file"), delegate { OpenFile(); }));
             tool.Items.Add(MakeButton(T("New board"), delegate { NewBoard(); }));
+            tool.Items.Add(MakeButton(T("Formula Editor"), delegate { OpenFormulaEditor(); }));
             tool.Items.Add(MakeButton(T("Refresh"), delegate { RefreshAll(); }));
             tool.Items.Add(new ToolStripSeparator());
             tool.Items.Add(new ToolStripLabel(T("Search:")));
@@ -667,6 +862,7 @@ namespace ExcalidrawManager
             _tray.DoubleClick += delegate { RestoreWindow(); };
             var menu = new ContextMenuStrip();
             menu.Items.Add(T("Show"), null, delegate { RestoreWindow(); });
+            menu.Items.Add(T("Formula Editor"), null, delegate { OpenFormulaEditor(); });
             menu.Items.Add(T("Stop all services"), null, delegate { StopAll(); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(T("Exit..."), null, delegate { ExitFromTray(); });
@@ -982,6 +1178,25 @@ namespace ExcalidrawManager
             return _grid.CurrentRow == null ? null : _grid.CurrentRow.DataBoundItem as DrawingInstance;
         }
 
+        private async void OpenFormulaEditor()
+        {
+            var selected = SelectedInstance();
+            string boardUrl = selected == null ? _instances.Select(x => x.Url).FirstOrDefault(x => !string.IsNullOrEmpty(x)) : selected.Url;
+            string language = Localization.Language;
+            _status.Text = T("Starting formula editor...");
+            try
+            {
+                string editorUrl = await Task.Run(() => FormulaEditorService.EnsureStarted(language, boardUrl));
+                FormulaEditorService.OpenInDefaultBrowser(editorUrl);
+                _status.Text = T("Formula editor opened");
+            }
+            catch (Exception ex)
+            {
+                ShowError(ex);
+                _status.Text = T("Start failed");
+            }
+        }
+
         private void OpenSelected() { var item = SelectedInstance(); if (item != null) OpenUrl(item.Url); }
         private void CopySelectedUrl() { var item = SelectedInstance(); if (item != null && !string.IsNullOrEmpty(item.Url)) Clipboard.SetText(item.Url); }
 
@@ -1070,7 +1285,7 @@ namespace ExcalidrawManager
         private void RebuildTrayInstances()
         {
             var menu = _tray.ContextMenuStrip;
-            while (menu.Items.Count > 4) menu.Items.RemoveAt(1);
+            while (menu.Items.Count > 5) menu.Items.RemoveAt(1);
             int at = 1;
             foreach (var instance in _instances.Take(12))
             {

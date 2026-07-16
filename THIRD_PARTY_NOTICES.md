@@ -3,6 +3,24 @@
 Excalidraw Manager is an independent project and is not affiliated with or
 endorsed by Excalidraw.
 
+The local formula editor redistributes pinned browser assets from MathLive
+0.110.0 and MathJax 4.1.3. Their license files are included next to the
+redistributed files under `runtime/formula-editor/vendor/`.
+
+## MathLive 0.110.0
+
+Source: <https://github.com/arnog/mathlive/releases/tag/v0.110.0>
+
+License: MIT
+
+## MathJax 4.1.3 and MathJax New Computer Modern font 4.1.3
+
+Source: <https://github.com/mathjax/MathJax-src/releases/tag/4.1.3>
+
+Font source: <https://github.com/mathjax/MathJax-fonts>
+
+License: Apache-2.0
+
 The generated file `dist/runtime/main.js` is derived from the browser client
 distributed with `excalidraw-edit@0.1.1`. At runtime, the manager also serves
 the remaining static assets from the user's global `excalidraw-edit`

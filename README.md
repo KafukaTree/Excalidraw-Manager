@@ -25,6 +25,10 @@ Managed board servers listen only on `127.0.0.1`.
 - Forward board paths to the existing window through single-instance IPC.
 - Persist one shared Excalidraw library across all managed boards and ports.
 - Import, merge, replace, export, clear, and browse public libraries.
+- Open the local formula editor from the toolbar or system tray.
+- Type LaTeX source with live preview, or edit visually with MathLive.
+- Insert common formula templates and export formulas without an online
+  rendering service.
 - Use `list` and `stop-all` from a terminal.
 - Follow the Windows display language automatically or switch between English
   and Simplified Chinese from the application settings.
@@ -68,6 +72,10 @@ Node.js and `excalidraw-edit` are external prerequisites; they are not bundled
 in the executable or repository. Custom installation directories are supported
 as long as `node.exe` and `excalidraw-edit.cmd` are on `PATH`.
 
+The formula editor bundles MathLive 0.110.0 and MathJax 4.1.3 in the application
+runtime. They do not need to be installed globally, and formula editing and
+rendering do not require a network connection.
+
 ## Quick start from source
 
 1. Install Node.js, then open a **new** PowerShell window.
@@ -106,14 +114,16 @@ require administrator rights.
 
 ## Install a prebuilt package
 
-If a package already contains the four tested files below, it can be installed
-without recompiling:
+If a package already contains the tested files and directories below, it can be
+installed without recompiling:
 
 ```text
 dist\ExcalidrawManager.exe
 dist\ExcalidrawManager.Cli.exe
 dist\runtime\main.js
 dist\runtime\server.mjs
+dist\runtime\formula-server.mjs
+dist\runtime\formula-editor\
 ```
 
 After installing the Node.js and `excalidraw-edit@0.1.1` prerequisites, run:
@@ -145,6 +155,55 @@ excalidraw-manager --version
 
 Be careful with `stop-all`: it also stops compatible `excalidraw-edit`
 processes launched outside this manager.
+
+## Local formula editor (0.3.0)
+
+Choose **Formula editor** on the manager toolbar or in the system-tray menu.
+The manager starts a service bound to `127.0.0.1` and opens the editor in your
+default browser. The page starts in source mode with the LaTeX input focused,
+so you can begin typing immediately. Switch to the visual editor when you want
+MathLive-assisted editing; both modes update the preview.
+
+MathJax renders the preview entirely from bundled local assets. The template
+panels cover common symbols, Greek letters, fractions and radicals, limits,
+trigonometry, integrals, sums, brackets, matrices, arrows, sets, and other
+frequently used structures.
+
+The editor can:
+
+- Copy LaTeX, inline or block Markdown, MathML, AsciiMath, Typst, or SVG code.
+- Export SVG, transparent or background-filled PNG, JPG, and `.tex` files.
+- Copy the rendered formula as PNG for pasting into notes.
+- Open the currently selected managed board after copying, so the image can be
+  pasted into Excalidraw with `Ctrl+V`.
+
+The **Image recognition** and **Document recognition** pages are present as the
+integration surface for future OCR experiments, but version 0.3.0 does **not**
+bundle or install an OCR model, so recognition stays disabled until a compatible
+local provider is configured.
+Providers can be added or replaced behind the documented model interface; see
+[Formula recognition provider API](docs/formula-model-api.md). This separation
+keeps the keyboard editor and exports usable even when no model is configured.
+
+For a local experimental provider, create
+`%LOCALAPPDATA%\ExcalidrawManager\formula-providers.json`:
+
+```json
+{
+  "providers": [
+    {
+      "id": "my-formula-model",
+      "baseUrl": "http://127.0.0.1:17861",
+      "enabled": true
+    }
+  ]
+}
+```
+
+The adapter only accepts loopback HTTP addresses. A provider that needs a
+Bearer token can name an inherited environment variable with `tokenEnv`; do not
+put the token itself in this file. The image-recognition page discovers the
+provider through `/v1/info` and enables recognition without changing the UI.
 
 ## Interface language
 
@@ -189,24 +248,29 @@ package.
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\smoke.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\localization.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\formula-editor.ps1
 ```
 
 The smoke test creates a temporary board, starts one local Node.js process,
 checks the scene/library/client endpoints, and stops only the PID that it
 created. The localization test validates Chinese and English strings, language
-preference handling, and version metadata without modifying user settings.
+preference handling, and version metadata without modifying user settings. The
+formula-editor test checks the local editor server, bundled browser assets,
+security boundaries, and formula-editor API without installing an OCR model.
 
 Project layout:
 
 ```text
-assets/                  Application icon sources
-dist/                    Tested Windows payload
-runtime/                 Local HTTP runtime and browser-client patcher
-src/                     WinForms GUI and command-line launcher
-tests/                   PowerShell smoke test
-build.ps1                Reproducible local build
-check-environment.ps1    Prerequisite diagnostics
-install.ps1              Per-user installer
+assets/                         Application icon sources
+docs/formula-model-api.md       Replaceable OCR provider contract
+dist/                           Tested Windows payload
+runtime/                        Local HTTP runtimes and browser-client patcher
+runtime/formula-editor/         Formula editor UI and bundled math assets
+src/                            WinForms GUI and command-line launcher
+tests/                          PowerShell integration tests
+build.ps1                       Reproducible local build
+check-environment.ps1           Prerequisite diagnostics
+install.ps1                     Per-user installer
 ```
 
 ## Troubleshooting
@@ -265,13 +329,16 @@ appropriate authentication, authorization, TLS, and request protections.
 
 Normal local editing does not require an online service. Network access is
 used when installing npm prerequisites and when the user explicitly imports
-an official public library.
+an official public library. The bundled formula editor renders locally and does
+not upload formulas or images. A future third-party recognition provider may
+have different network and privacy behavior; review it before configuring it.
 
 ## Contributing
 
 Keep changes compatible with Windows PowerShell 5.1 and the built-in .NET
-Framework compiler. Before opening a pull request, run both `build.ps1` and
-`tests\smoke.ps1`, and avoid committing personal board files or local settings.
+Framework compiler. Before opening a pull request, run `build.ps1`,
+`tests\smoke.ps1`, `tests\localization.ps1`, and `tests\formula-editor.ps1`, and
+avoid committing personal board files or local settings.
 
 ## License
 
