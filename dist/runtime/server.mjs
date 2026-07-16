@@ -12,7 +12,9 @@ const port = Number.parseInt(option('--port', '6417'), 10);
 const theme = option('--theme', 'system');
 const publicDir = resolve(option('--public-dir', ''));
 const libraryPath = resolve(option('--library', 'shared.excalidrawlib'));
+const requestedFormulaUrl = option('--formula-url', '');
 const patchedMainPath = join(import.meta.dirname, 'main.js');
+const formulaOverlayPath = join(import.meta.dirname, 'formula-overlay.mjs');
 const emptyLibrary = { type: 'excalidrawlib', version: 2, source: 'ExcalidrawManager', libraryItems: [] };
 
 const mimeTypes = {
@@ -21,6 +23,20 @@ const mimeTypes = {
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff',
   '.ttf': 'font/ttf', '.png': 'image/png', '.ico': 'image/x-icon',
 };
+
+function loopbackFormulaUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) || url.username || url.password)
+      return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+const formulaEditorUrl = loopbackFormulaUrl(requestedFormulaUrl);
 
 async function readLibrary() {
   try {
@@ -81,7 +97,7 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/meta') {
       res.writeHead(200, { 'Content-Type': mimeTypes['.json'] });
-      res.end(JSON.stringify({ fileName: basename(filePath), theme, libraryPersistence: true })); return;
+      res.end(JSON.stringify({ fileName: basename(filePath), theme, libraryPersistence: true, formulaEditorUrl })); return;
     }
     if (req.method === 'GET' && url.pathname === '/data') {
       const data = await readFile(filePath);
@@ -111,6 +127,15 @@ const server = createServer(async (req, res) => {
       const path = relative === 'main.js' ? patchedMainPath : join(publicDir, 'assets', relative);
       const data = await readFile(path);
       res.writeHead(200, { 'Content-Type': mimeTypes[extname(path)] || 'application/octet-stream' }); res.end(data); return;
+    }
+    if (req.method === 'GET' && url.pathname === '/formula-overlay.mjs') {
+      const data = await readFile(formulaOverlayPath);
+      res.writeHead(200, {
+        'Content-Type': 'text/javascript; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      res.end(data); return;
     }
     res.writeHead(404); res.end('Not found');
   } catch (error) {

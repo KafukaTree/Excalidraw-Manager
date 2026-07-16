@@ -34,7 +34,7 @@ Provider 由用户显式添加到本地配置，例如：
 }
 ```
 
-0.3.0 的管理器适配层从 `%LOCALAPPDATA%\ExcalidrawManager\formula-providers.json` 读取上述条目；文件可以是条目数组，也可以使用 `{ "providers": [...] }`。`tokenEnv` 只保存环境变量名，令牌本身不得写入配置文件。适配层只接受回环 HTTP 地址，并通过 `/api/models`、`/api/recognize` 和 `/api/warmup` 向编辑器提供同源代理。未创建该配置文件时，识别页保持“模型未安装”，但编辑和导出功能完全可用。
+0.4.0 的管理器适配层从 `%LOCALAPPDATA%\ExcalidrawManager\formula-providers.json` 读取上述条目；文件可以是条目数组，也可以使用 `{ "providers": [...] }`。`tokenEnv` 只保存环境变量名，令牌本身不得写入配置文件。适配层只接受回环 HTTP 地址，并通过 `/api/models`、`/api/recognize` 和 `/api/warmup` 向编辑器提供同源代理。未创建该配置文件时，识别页保持“模型未安装”，但编辑和导出功能完全可用。
 
 未来接入 Windows 凭据存储时可以增加 `tokenRef`；它应指向安全存储中的令牌，而不是令牌本身。Client 不应该扫描端口或自动信任局域网中发现的服务。`GET /v1/info` 是能力发现的唯一权威来源。
 

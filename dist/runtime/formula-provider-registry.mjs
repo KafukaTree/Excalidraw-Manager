@@ -2,6 +2,8 @@ import { readFile } from 'node:fs/promises';
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 const MAX_PROVIDER_RESPONSE = 16 * 1024 * 1024;
+const MAX_FORMULA_CANDIDATES = 10;
+const MAX_LATEX_CHARACTERS = 16_384;
 
 export class ProviderRegistryError extends Error {
   constructor(code, message, statusCode = 500, retryable = false, details = null) {
@@ -73,12 +75,22 @@ function providerHeaders(provider) {
 
 async function requestProvider(provider, pathname, options = {}, timeoutMs = 5000) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const externalSignal = options.signal || null;
+  const requestOptions = { ...options };
+  delete requestOptions.signal;
+  let timedOut = false;
+  const abortFromClient = () => controller.abort();
+  if (externalSignal?.aborted) abortFromClient();
+  else externalSignal?.addEventListener('abort', abortFromClient, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
   timer.unref?.();
   try {
     const response = await fetch(providerUrl(provider.baseUrl, pathname), {
-      ...options,
-      headers: { ...providerHeaders(provider), ...(options.headers || {}) },
+      ...requestOptions,
+      headers: { ...providerHeaders(provider), ...(requestOptions.headers || {}) },
       redirect: 'error',
       signal: controller.signal,
     });
@@ -86,12 +98,16 @@ async function requestProvider(provider, pathname, options = {}, timeoutMs = 500
     return { status: response.status, ok: response.ok, body };
   } catch (error) {
     if (error instanceof ProviderRegistryError) throw error;
-    if (error.name === 'AbortError') {
+    if (externalSignal?.aborted) {
+      throw new ProviderRegistryError('REQUEST_ABORTED', 'The client disconnected', 499, false);
+    }
+    if (timedOut || error.name === 'AbortError') {
       throw new ProviderRegistryError('PROVIDER_TIMEOUT', 'Local provider did not respond in time', 504, true);
     }
     throw new ProviderRegistryError('PROVIDER_UNAVAILABLE', 'Local provider is unavailable', 503, true);
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', abortFromClient);
   }
 }
 
@@ -149,14 +165,22 @@ export class FormulaProviderRegistry {
         if (!result.ok || !String(result.body.apiVersion || '').startsWith('1.')) {
           throw new ProviderRegistryError('API_VERSION_UNSUPPORTED', 'Provider does not expose a compatible v1 API', 502);
         }
-        return { id: provider.id, name: provider.name, available: true, info: result.body };
+        const health = await requestProvider(provider, '/v1/health', { method: 'GET' }, 1500);
+        if (!health.ok || health.body?.status !== 'ok') {
+          throw new ProviderRegistryError(
+            'MODEL_UNAVAILABLE',
+            health.body?.warnings?.join(' ') || 'The local provider is not ready',
+            503,
+          );
+        }
+        return { id: provider.id, name: provider.name, available: true, info: result.body, health: health.body };
       } catch (error) {
         return { id: provider.id, name: provider.name, available: false, error: { code: error.code || 'PROVIDER_UNAVAILABLE', message: error.message } };
       }
     }));
   }
 
-  async recognize(request) {
+  async recognize(request, signal = null) {
     await this.load();
     const provider = this.select(request.providerId);
     const payload = { ...request };
@@ -165,6 +189,7 @@ export class FormulaProviderRegistry {
     const result = await requestProvider(provider, '/v1/recognize', {
       method: 'POST',
       body: JSON.stringify(payload),
+      signal,
     }, timeout + 1000);
     if (!result.ok) {
       const remoteError = result.body?.error;
@@ -176,13 +201,27 @@ export class FormulaProviderRegistry {
         remoteError?.details || null,
       );
     }
-    if (payload.mode === 'formula' && (!Array.isArray(result.body.candidates) || !result.body.candidates.some((item) => typeof item?.latex === 'string'))) {
-      throw new ProviderRegistryError('PROVIDER_RESPONSE_INVALID', 'Provider returned no LaTeX candidate', 502);
+    if (payload.mode === 'formula') {
+      const candidates = Array.isArray(result.body.candidates)
+        ? result.body.candidates.filter((item) => typeof item?.latex === 'string' && item.latex.trim())
+        : [];
+      if (!candidates.length) {
+        throw new ProviderRegistryError('PROVIDER_RESPONSE_INVALID', 'Provider returned no LaTeX candidate', 502);
+      }
+      if (candidates.some((item) => item.latex.length > MAX_LATEX_CHARACTERS)) {
+        throw new ProviderRegistryError('PROVIDER_RESPONSE_TOO_LARGE', 'A LaTeX candidate exceeds 16384 characters', 502);
+      }
+      const requestedLimit = Number(payload.options?.maxCandidates);
+      const candidateLimit = Math.min(
+        MAX_FORMULA_CANDIDATES,
+        Math.max(1, Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : MAX_FORMULA_CANDIDATES),
+      );
+      result.body = { ...result.body, candidates: candidates.slice(0, candidateLimit) };
     }
     return result.body;
   }
 
-  async warmup(request) {
+  async warmup(request, signal = null) {
     await this.load();
     const provider = this.select(request.providerId);
     const payload = { ...request };
@@ -190,6 +229,7 @@ export class FormulaProviderRegistry {
     const result = await requestProvider(provider, '/v1/warmup', {
       method: 'POST',
       body: JSON.stringify(payload),
+      signal,
     }, Math.min(300000, Math.max(1000, Number(payload.timeoutMs) || 120000)) + 1000);
     if (!result.ok) {
       const remoteError = result.body?.error;

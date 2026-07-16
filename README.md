@@ -26,9 +26,13 @@ Managed board servers listen only on `127.0.0.1`.
 - Persist one shared Excalidraw library across all managed boards and ports.
 - Import, merge, replace, export, clear, and browse public libraries.
 - Open the local formula editor from the toolbar or system tray.
-- Type LaTeX source with live preview, or edit visually with MathLive.
-- Insert common formula templates and export formulas without an online
-  rendering service.
+- Type LaTeX with syntax highlighting, broad backslash-command completion, a
+  compact hover symbol palette, and a live preview, or edit visually with MathLive.
+- Toggle a floating formula palette over a managed board with `Ctrl+Alt+F`,
+  then press `Ctrl+Enter` to insert the rendered SVG into Excalidraw.
+- Paste a formula screenshot, or press `Ctrl+Alt+O` to select a screen region
+  in memory and recognize it with optional, fully local OCR.
+- Export formulas without an online rendering service; SVG is the default.
 - Use `list` and `stop-all` from a terminal.
 - Follow the Windows display language automatically or switch between English
   and Simplified Chinese from the application settings.
@@ -63,6 +67,7 @@ canvas.
 | `excalidraw-edit` | **Exactly 0.1.1** |
 | Source builds | Windows .NET Framework 4.x C# compiler (`csc.exe`) |
 | Browser | A current Chromium-, Firefox-, or WebView-compatible browser |
+| Optional local formula OCR | 64-bit Python 3.10-3.12, Microsoft Visual C++ 2019+ x64 runtime, and about 450-650 MB on disk |
 
 `excalidraw-edit` is pinned because the managed-library integration patches
 specific client markers from version 0.1.1. A different version is rejected
@@ -75,6 +80,9 @@ as long as `node.exe` and `excalidraw-edit.cmd` are on `PATH`.
 The formula editor bundles MathLive 0.110.0 and MathJax 4.1.3 in the application
 runtime. They do not need to be installed globally, and formula editing and
 rendering do not require a network connection.
+
+Formula OCR is optional. Its Python environment and model weights are not
+bundled in the application, source repository, or release package.
 
 ## Quick start from source
 
@@ -120,10 +128,14 @@ installed without recompiling:
 ```text
 dist\ExcalidrawManager.exe
 dist\ExcalidrawManager.Cli.exe
+dist\runtime\FormulaCapture.exe
 dist\runtime\main.js
 dist\runtime\server.mjs
 dist\runtime\formula-server.mjs
+dist\runtime\formula-overlay.mjs
+dist\runtime\formula-ocr-provider\
 dist\runtime\formula-editor\
+dist\runtime\formula-editor\completion.mjs
 ```
 
 After installing the Node.js and `excalidraw-edit@0.1.1` prerequisites, run:
@@ -156,7 +168,7 @@ excalidraw-manager --version
 Be careful with `stop-all`: it also stops compatible `excalidraw-edit`
 processes launched outside this manager.
 
-## Local formula editor (0.3.0)
+## Local formula editor (0.4.0)
 
 Choose **Formula editor** on the manager toolbar or in the system-tray menu.
 The manager starts a service bound to `127.0.0.1` and opens the editor in your
@@ -164,28 +176,85 @@ default browser. The page starts in source mode with the LaTeX input focused,
 so you can begin typing immediately. Switch to the visual editor when you want
 MathLive-assisted editing; both modes update the preview.
 
-MathJax renders the preview entirely from bundled local assets. The template
-panels cover common symbols, Greek letters, fractions and radicals, limits,
-trigonometry, integrals, sums, brackets, matrices, arrows, sets, and other
-frequently used structures.
+MathJax renders the preview entirely from bundled local assets. Source mode
+highlights LaTeX commands, braces, comments, numbers, operators, and errors.
+Type a backslash to open suggestions from the expanded command catalog; for
+example, `\lef` offers `\leftarrow`, `\leftrightarrow`, arrow tails, and
+harpoons. Use the arrow keys to choose one, `Tab` or `Enter` to accept it, and
+`Escape` to close the list. The previous large formula-template panel remains
+removed. A compact category strip now opens small downward symbol menus on
+hover, focus, or click, then inserts the selected item at the current caret.
 
 The editor can:
 
-- Copy LaTeX, inline or block Markdown, MathML, AsciiMath, Typst, or SVG code.
+- Copy LaTeX, inline or block Markdown, MathML, AsciiMath, Typst, or SVG code;
+  SVG is selected by default.
 - Export SVG, transparent or background-filled PNG, JPG, and `.tex` files.
-- Copy the rendered formula as PNG for pasting into notes.
-- Open the currently selected managed board after copying, so the image can be
-  pasted into Excalidraw with `Ctrl+V`.
+- Render and copy the current formula as SVG with `Ctrl+Enter`.
 
-The **Image recognition** and **Document recognition** pages are present as the
-integration surface for future OCR experiments, but version 0.3.0 does **not**
-bundle or install an OCR model, so recognition stays disabled until a compatible
-local provider is configured.
+Every managed board includes an `fx` launcher for a draggable formula palette.
+Press `Ctrl+Alt+F` to show or hide it. Resize from any edge or corner; its size
+and position persist. At narrow widths, categories and actions reflow, source
+text wraps, and wide previews scale down without a horizontal scrollbar.
+`Ctrl+Enter` sends sanitized SVG code directly to
+Excalidraw and leaves the palette open. If direct insertion is unavailable, the
+palette copies the SVG so it can be pasted with `Ctrl+V`. The embedded palette
+stays inside the browser viewport by design; choose **Pop out** to obtain a
+normal resizable window that can be moved beyond the board or onto another
+monitor while still inserting into the original board.
+
+With a compatible local OCR provider installed, paste a PNG, JPG, or WebP
+formula screenshot into the compact palette. Recognition runs in the background
+and applies the first LaTeX candidate to the input for review. The full editor's
+**Image recognition** page also supports choosing, dropping, or pasting an image
+and reviewing multiple candidates. While the board, embedded palette, or detached
+formula window has focus, press `Ctrl+Alt+O` (or choose **Capture OCR**) to drag
+around any screen region and recognize it immediately. This is intentionally a
+window-level shortcut and does not take over a Windows global hotkey. The native picker
+captures and transfers PNG data in memory; it does not create a screenshot file
+in the Windows Screenshots folder or elsewhere. Editing, rendering, and export
+remain fully usable when OCR is not installed.
+
+### Optional local RapidLaTeXOCR provider
+
+Version 0.4.0 includes the provider adapter and an explicit installation script,
+but it does **not** bundle a Python environment or model weights and never
+downloads them merely by starting the manager. To install the optional CPU-only
+RapidLaTeXOCR 0.0.9 provider on the D drive, first install 64-bit Python
+3.10-3.12 on that drive, ensure the Microsoft Visual C++ 2019-or-newer x64
+runtime is present, review the upstream model terms, and then run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-formula-ocr.ps1 `
+  -InstallRoot 'D:\DevTools\ExcalidrawManager\FormulaOCR' `
+  -Python 'D:\DevTools\Python\Master\Py312\python.exe' `
+  -AcceptUpstreamModelLicense
+```
+
+Adjust the Python path to match your installation. The script creates an
+isolated environment and keeps its pip, temporary, Hugging Face, and Torch cache
+directories under the selected root. It refuses the Windows system drive by
+default. Expect approximately **260-290 MB of downloads** and **450-650 MB of
+disk usage** after installation. It does not install the Microsoft Visual C++
+runtime; if that prerequisite is missing, install it separately only after
+reviewing and approving Microsoft's installer.
+
+After installation, open **Settings**, enable automatic local formula OCR, and
+select the same `FormulaOCR` root. The manager then starts the provider only on
+`127.0.0.1`, creates an ephemeral Bearer token, and stops the provider with the
+application. This RapidLaTeXOCR adapter intentionally uses CPU inference.
+
+The model files are not committed to this repository or included in public
+releases. The referenced weights originate from pix2tex and are marked upstream
+as **CC BY-NC-SA**; review those non-commercial/share-alike terms before
+downloading or redistributing them. See
+[Third-party notices](THIRD_PARTY_NOTICES.md) for the upstream links and caveat.
+
 Providers can be added or replaced behind the documented model interface; see
 [Formula recognition provider API](docs/formula-model-api.md). This separation
-keeps the keyboard editor and exports usable even when no model is configured.
+allows later OCR experiments without changing the editor UI.
 
-For a local experimental provider, create
+To use a different local experimental provider, create
 `%LOCALAPPDATA%\ExcalidrawManager\formula-providers.json`:
 
 ```json
@@ -249,6 +318,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\smoke.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\localization.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\formula-editor.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\formula-ocr-provider.ps1
 ```
 
 The smoke test creates a temporary board, starts one local Node.js process,
@@ -257,6 +327,9 @@ created. The localization test validates Chinese and English strings, language
 preference handling, and version metadata without modifying user settings. The
 formula-editor test checks the local editor server, bundled browser assets,
 security boundaries, and formula-editor API without installing an OCR model.
+Its capture tests use a tiny fake helper and never take a real screenshot.
+The provider-contract test uses a small fake Python runtime and does not download
+or install RapidLaTeXOCR or its weights.
 
 Project layout:
 
@@ -265,8 +338,12 @@ assets/                         Application icon sources
 docs/formula-model-api.md       Replaceable OCR provider contract
 dist/                           Tested Windows payload
 runtime/                        Local HTTP runtimes and browser-client patcher
+runtime/formula-overlay.mjs     Floating formula palette for managed boards
+runtime/formula-ocr-provider/   Loopback-only optional OCR provider adapter
 runtime/formula-editor/         Formula editor UI and bundled math assets
+scripts/install-formula-ocr.ps1 Explicit optional OCR installer
 src/                            WinForms GUI and command-line launcher
+src/FormulaCapture.cs           In-memory Windows region picker used by capture OCR
 tests/                          PowerShell integration tests
 build.ps1                       Reproducible local build
 check-environment.ps1           Prerequisite diagnostics
@@ -330,15 +407,18 @@ appropriate authentication, authorization, TLS, and request protections.
 Normal local editing does not require an online service. Network access is
 used when installing npm prerequisites and when the user explicitly imports
 an official public library. The bundled formula editor renders locally and does
-not upload formulas or images. A future third-party recognition provider may
-have different network and privacy behavior; review it before configuring it.
+not upload formulas or images. The optional managed RapidLaTeXOCR provider also
+runs locally; only its explicit installation step downloads Python packages and
+model files. A separately configured third-party provider may have different
+network and privacy behavior, so review it before use.
 
 ## Contributing
 
 Keep changes compatible with Windows PowerShell 5.1 and the built-in .NET
 Framework compiler. Before opening a pull request, run `build.ps1`,
-`tests\smoke.ps1`, `tests\localization.ps1`, and `tests\formula-editor.ps1`, and
-avoid committing personal board files or local settings.
+`tests\smoke.ps1`, `tests\localization.ps1`, `tests\formula-editor.ps1`, and
+`tests\formula-ocr-provider.ps1`. Avoid committing personal board files or local
+settings.
 
 ## License
 

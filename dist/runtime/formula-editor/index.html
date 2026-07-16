@@ -39,7 +39,7 @@
       <div class="card-heading">
         <div>
           <h2 id="input-title"><span aria-hidden="true">✎</span> <span data-i18n="inputTitle">输入区域</span></h2>
-          <p data-i18n="inputHint">直接键入 LaTeX，或用可视化编辑器和模板快速构建公式。</p>
+          <p data-i18n="inputHint">直接键入 LaTeX，或用可视化编辑器快速构建公式。</p>
         </div>
         <button id="keyboard-button" class="secondary-button" type="button">
           <span aria-hidden="true">⌨</span> <span data-i18n="keyboard">数学键盘</span>
@@ -48,19 +48,18 @@
 
       <div class="feature-tabs" role="tablist" aria-label="Input tools">
         <button class="feature-tab active" type="button" role="tab" aria-selected="true" data-panel="quick" data-i18n="quickTools">快捷工具</button>
-        <button class="feature-tab" type="button" role="tab" aria-selected="false" data-panel="templates" data-i18n="formulaTemplates">公式模板</button>
         <button class="feature-tab" type="button" role="tab" aria-selected="false" data-panel="image" data-i18n="imageRecognition">图片识别</button>
         <button class="feature-tab" type="button" role="tab" aria-selected="false" data-panel="document" data-i18n="documentRecognition">文档识别</button>
       </div>
 
       <div id="quick-panel" class="feature-panel" role="tabpanel">
-        <div id="quick-groups" class="tool-groups"></div>
-      </div>
-
-      <div id="templates-panel" class="feature-panel hidden" role="tabpanel">
-        <div class="template-layout">
-          <nav id="template-categories" class="template-categories" aria-label="Template categories"></nav>
-          <div id="template-grid" class="template-grid"></div>
+        <div id="quick-groups" class="tool-groups" role="toolbar" aria-label="常用公式与符号"></div>
+        <div id="quick-popover" class="quick-popover hidden" role="menu" aria-labelledby="quick-popover-title">
+          <div class="quick-popover-heading">
+            <strong id="quick-popover-title">常用</strong>
+            <button id="quick-popover-close" type="button" data-i18n-aria-label="closeQuickPalette" aria-label="关闭符号面板">×</button>
+          </div>
+          <div id="quick-symbol-grid" class="symbol-grid"></div>
         </div>
       </div>
 
@@ -78,7 +77,7 @@
           <strong data-i18n="dropImage">拖入、粘贴或选择公式截图</strong>
           <span data-i18n="imageTypes">支持 PNG、JPG、WebP；图片只在本机处理</span>
           <button class="secondary-button" type="button" data-file-trigger="image" data-i18n="chooseImage">选择图片</button>
-          <input id="image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+          <input id="image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
         </div>
         <div id="image-staging" class="staging hidden">
           <img id="image-preview" alt="Selected formula">
@@ -158,9 +157,13 @@
       <div class="editor-shell">
         <div id="source-editor-wrap" class="editor-pane">
           <label for="latex-source" data-i18n="latexSource">LaTeX 源码</label>
-          <textarea id="latex-source" spellcheck="false" autocomplete="off" aria-describedby="source-help" placeholder="例如：\frac{-b \pm \sqrt{b^2-4ac}}{2a}"></textarea>
+          <div id="source-code-editor" class="source-code-editor">
+            <pre id="source-highlight" class="source-highlight" aria-hidden="true"><code></code></pre>
+            <textarea id="latex-source" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="source-help" aria-autocomplete="list" aria-controls="command-suggestions" aria-expanded="false" aria-keyshortcuts="Control+Enter" placeholder="例如：\frac{-b \pm \sqrt{b^2-4ac}}{2a}"></textarea>
+            <div id="command-suggestions" class="command-suggestions hidden" role="listbox" aria-label="LaTeX command suggestions"></div>
+          </div>
           <div class="editor-footer">
-            <span id="source-help" data-i18n="sourceHelp">Ctrl + Enter 立即渲染 · 自动保存草稿</span>
+            <span id="source-help" data-i18n="sourceHelp">Ctrl + Enter 渲染并复制 SVG · 输入 \ 查看命令</span>
             <span id="character-count">0</span>
           </div>
         </div>
@@ -221,7 +224,8 @@
           </label>
         </div>
         <div class="export-actions">
-          <button id="copy-png" class="primary-button" type="button"><span aria-hidden="true">▣</span> <span data-i18n="copyPng">复制 PNG</span></button>
+          <button id="capture-ocr" class="secondary-button" type="button" title="Ctrl + Alt + O"><span aria-hidden="true">▣</span> <span data-i18n="captureOcr">截屏 OCR</span></button>
+          <button id="copy-svg" class="primary-button" type="button" title="Ctrl + Enter"><span aria-hidden="true">◇</span> <span data-i18n="copySvg">复制 SVG</span></button>
           <div class="split-export">
             <button id="download-main" class="secondary-button" type="button"><span data-i18n="downloadSvg">下载 SVG</span></button>
             <button id="download-menu-button" class="secondary-button split-toggle" type="button" aria-haspopup="menu" aria-expanded="false">▾</button>
@@ -238,13 +242,13 @@
 
       <div class="code-output">
         <div class="code-tabs" role="tablist" aria-label="Text output formats">
-          <button class="active" type="button" data-format="latex">LaTeX</button>
+          <button class="active" type="button" data-format="svg">SVG Code</button>
+          <button type="button" data-format="latex">LaTeX</button>
           <button type="button" data-format="markdown-inline">Markdown inline</button>
           <button type="button" data-format="markdown-block">Markdown block</button>
           <button type="button" data-format="mathml">MathML</button>
           <button type="button" data-format="asciimath">AsciiMath</button>
           <button type="button" data-format="typst">Typst</button>
-          <button type="button" data-format="svg">SVG Code</button>
         </div>
         <div class="code-box">
           <textarea id="code-value" readonly spellcheck="false"></textarea>

@@ -44,7 +44,7 @@ Assert-Equal 'system' $settings.Language 'Default language preference'
 
 $guiVersion = (Get-Item -LiteralPath $exe).VersionInfo.FileVersion
 $cliVersion = (& $cli --version).Trim()
-Assert-Equal '0.3.0.0' $guiVersion 'GUI file version'
-Assert-Equal '0.3.0' $cliVersion 'CLI version'
+Assert-Equal '0.4.0.0' $guiVersion 'GUI file version'
+Assert-Equal '0.4.0' $cliVersion 'CLI version'
 
 Write-Host 'PASS Chinese and English localization, language preferences, and version metadata'

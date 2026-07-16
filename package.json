@@ -1,6 +1,6 @@
 {
   "name": "excalidraw-manager-formula-editor-assets",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Pinned browser assets used by the local Excalidraw Manager formula editor.",
   "license": "MIT",

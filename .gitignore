@@ -13,4 +13,13 @@ TestResults/
 .tmp/
 node_modules/
 
+# Optional local OCR environments and model weights
+.venv/
+venv/
+FormulaOCR/
+*.onnx
+*.pt
+*.pth
+*.safetensors
+
 # This project intentionally keeps dist/ as the tested Windows payload.

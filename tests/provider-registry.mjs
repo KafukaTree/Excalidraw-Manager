@@ -20,6 +20,11 @@ async function readBody(request) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
 }
 
+let mockHealthy = true;
+let notifyAbortRequestStarted;
+let providerAbortObserved = false;
+const abortRequestStarted = new Promise((resolveStarted) => { notifyAbortRequestStarted = resolveStarted; });
+
 const mock = createServer(async (request, response) => {
   const url = new URL(request.url, 'http://localhost');
   response.setHeader('Content-Type', 'application/json');
@@ -32,6 +37,12 @@ const mock = createServer(async (request, response) => {
     }));
     return;
   }
+  if (request.method === 'GET' && url.pathname === '/v1/health') {
+    response.end(JSON.stringify(mockHealthy
+      ? { status: 'ok', ready: true, loadedModels: ['mock-formula'], warnings: [] }
+      : { status: 'unavailable', ready: false, loadedModels: [], warnings: ['integrity failure'] }));
+    return;
+  }
   if (request.method === 'POST' && url.pathname === '/v1/warmup') {
     const body = await readBody(request);
     response.end(JSON.stringify({ requestId: body.requestId, status: 'ready', elapsedMs: 1 }));
@@ -39,10 +50,31 @@ const mock = createServer(async (request, response) => {
   }
   if (request.method === 'POST' && url.pathname === '/v1/recognize') {
     const body = await readBody(request);
+    if (body.requestId === 'abort-test') {
+      notifyAbortRequestStarted();
+      await new Promise((resolveAbort) => {
+        const timer = setTimeout(resolveAbort, 3000);
+        response.once('close', () => {
+          providerAbortObserved = true;
+          clearTimeout(timer);
+          resolveAbort();
+        });
+      });
+      if (response.destroyed) return;
+    }
+    const candidates = body.requestId === 'many-candidates'
+      ? Array.from({ length: 12 }, (_, index) => ({ id: `candidate-${index}`, latex: `x_${index}` }))
+      : [{
+        id: 'candidate-0',
+        latex: body.requestId === 'oversized-latex' ? 'x'.repeat(16_385) : 'E=mc^2',
+        confidence: 0.99,
+        formats: {},
+        warnings: [],
+      }];
     response.end(JSON.stringify({
       requestId: body.requestId,
       mode: body.mode,
-      candidates: [{ id: 'candidate-0', latex: 'E=mc^2', confidence: 0.99, formats: {}, warnings: [] }],
+      candidates,
       provider: { id: 'mock-provider', version: '1.0.0' },
       model: { id: 'mock-formula', version: '1.0.0', revision: 'test' },
       timing: { totalMs: 1 },
@@ -68,6 +100,11 @@ try {
   assert(providers.length === 1 && providers[0].available, 'mock provider is discovered');
   assert(providers[0].info.provider.id === 'mock-provider', 'provider identity is preserved');
 
+  mockHealthy = false;
+  const unavailable = await registry.describe(true);
+  assert(!unavailable[0].available && unavailable[0].error.code === 'MODEL_UNAVAILABLE', 'unhealthy provider is not offered to the editor');
+  mockHealthy = true;
+
   const recognition = await registry.recognize({
     requestId: 'recognize-test',
     providerId: 'mock',
@@ -77,6 +114,49 @@ try {
   });
   assert(recognition.candidates[0].latex === 'E=mc^2', 'recognition result is proxied');
   assert(recognition.candidates[0].confidence === 0.99, 'candidate metadata is preserved');
+
+  const boundedRecognition = await registry.recognize({
+    requestId: 'many-candidates',
+    providerId: 'mock',
+    mode: 'formula',
+    input: { kind: 'image', mediaType: 'image/png', dataBase64: 'AA==' },
+    options: { timeoutMs: 2000, maxCandidates: 3 },
+  });
+  assert(boundedRecognition.candidates.length === 3, 'provider candidates are bounded by the requested limit');
+
+  let oversizedLatexError = null;
+  try {
+    await registry.recognize({
+      requestId: 'oversized-latex',
+      providerId: 'mock',
+      mode: 'formula',
+      input: { kind: 'image', mediaType: 'image/png', dataBase64: 'AA==' },
+      options: { timeoutMs: 2000 },
+    });
+  } catch (error) {
+    oversizedLatexError = error;
+  }
+  assert(oversizedLatexError?.code === 'PROVIDER_RESPONSE_TOO_LARGE', 'oversized LaTeX candidates are rejected before reaching the UI');
+
+  const abortController = new AbortController();
+  const abortedRecognition = registry.recognize({
+    requestId: 'abort-test',
+    providerId: 'mock',
+    mode: 'formula',
+    input: { kind: 'image', mediaType: 'image/png', dataBase64: 'AA==' },
+    options: { timeoutMs: 5000 },
+  }, abortController.signal);
+  await abortRequestStarted;
+  abortController.abort();
+  let abortError = null;
+  try { await abortedRecognition; }
+  catch (error) { abortError = error; }
+  assert(abortError?.code === 'REQUEST_ABORTED' && abortError.statusCode === 499, 'client abort cancels downstream recognition');
+  const abortDeadline = Date.now() + 2000;
+  while (!providerAbortObserved && Date.now() < abortDeadline) {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+  }
+  assert(providerAbortObserved, 'downstream provider connection closes after client abort');
 
   const warmup = await registry.warmup({ providerId: 'mock', requestId: 'warmup-test', timeoutMs: 2000 });
   assert(warmup.status === 'ready', 'warmup result is proxied');

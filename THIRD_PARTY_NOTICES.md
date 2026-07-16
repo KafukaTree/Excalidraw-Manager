@@ -21,6 +21,33 @@ Font source: <https://github.com/mathjax/MathJax-fonts>
 
 License: Apache-2.0
 
+## Optional RapidLaTeXOCR 0.0.9 provider (not redistributed)
+
+The repository includes an adapter and an explicit helper script that a user
+may choose to run to install RapidLaTeXOCR and its dependencies into a separate
+local Python environment. RapidLaTeXOCR, its Python dependencies, and its model
+weights are **not** included in this repository or in Excalidraw Manager release
+packages.
+
+Project source: <https://github.com/RapidAI/RapidLaTeXOCR>
+
+Python package: <https://pypi.org/project/rapid-latex-ocr/0.0.9/>
+
+Model asset source:
+<https://github.com/RapidAI/RapidLaTeXOCR/releases/tag/v0.0.0>
+
+The RapidLaTeXOCR repository contains an MIT license file, while its Python
+package metadata identifies the Apache Software License. Review the exact
+upstream version and terms before installing, using, or redistributing it.
+
+The referenced ONNX weights originate from pix2tex and are marked upstream as
+**CC BY-NC-SA**. Those terms include non-commercial and share-alike conditions.
+The installation script therefore requires an explicit
+`-AcceptUpstreamModelLicense` acknowledgement and does not place the weights in
+this project's source tree or public packages. This notice is not legal advice;
+users and redistributors are responsible for confirming that their intended use
+complies with the upstream terms.
+
 The generated file `dist/runtime/main.js` is derived from the browser client
 distributed with `excalidraw-edit@0.1.1`. At runtime, the manager also serves
 the remaining static assets from the user's global `excalidraw-edit`

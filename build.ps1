@@ -6,8 +6,12 @@ $output = Join-Path $root 'dist\ExcalidrawManager.exe'
 $cliOutput = Join-Path $root 'dist\ExcalidrawManager.Cli.exe'
 $icon = Join-Path $root 'assets\app-icon.ico'
 $runtimeOutput = Join-Path $root 'dist\runtime'
+$formulaCaptureSource = Join-Path $root 'src\FormulaCapture.cs'
+$formulaCaptureOutput = Join-Path $runtimeOutput 'FormulaCapture.exe'
 $formulaServerSource = Join-Path $root 'runtime\formula-server.mjs'
 $formulaProviderSource = Join-Path $root 'runtime\formula-provider-registry.mjs'
+$formulaOverlaySource = Join-Path $root 'runtime\formula-overlay.mjs'
+$formulaOcrProviderSource = Join-Path $root 'runtime\formula-ocr-provider'
 $formulaEditorSource = Join-Path $root 'runtime\formula-editor'
 $formulaAssetSync = Join-Path $root 'scripts\sync-formula-assets.ps1'
 $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
@@ -31,11 +35,15 @@ if (($formulaPackageManifests | Where-Object { -not (Test-Path -LiteralPath $_) 
 
 $formulaVersionsPath = Join-Path $formulaEditorSource 'vendor\versions.json'
 $formulaSources = @(
+    $formulaCaptureSource,
     $formulaServerSource,
     $formulaProviderSource,
+    $formulaOverlaySource,
+    (Join-Path $formulaOcrProviderSource 'server.py'),
     (Join-Path $formulaEditorSource 'index.html'),
     (Join-Path $formulaEditorSource 'styles.css'),
     (Join-Path $formulaEditorSource 'app.mjs'),
+    (Join-Path $formulaEditorSource 'completion.mjs'),
     (Join-Path $formulaEditorSource 'templates.mjs'),
     $formulaVersionsPath,
     (Join-Path $formulaEditorSource 'vendor\mathlive\mathlive.min.mjs'),
@@ -57,8 +65,12 @@ if ($formulaVersions.mathlive -ne '0.110.0' -or
 }
 & node --check $formulaServerSource
 if ($LASTEXITCODE -ne 0) { throw 'Formula editor server has invalid JavaScript syntax' }
+& node --check $formulaOverlaySource
+if ($LASTEXITCODE -ne 0) { throw 'Formula overlay has invalid JavaScript syntax' }
 & node --check (Join-Path $formulaEditorSource 'app.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Formula editor application has invalid JavaScript syntax' }
+& node --check (Join-Path $formulaEditorSource 'completion.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Formula editor completion helper has invalid JavaScript syntax' }
 & node --check (Join-Path $formulaEditorSource 'templates.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Formula editor templates have invalid JavaScript syntax' }
 
@@ -72,17 +84,30 @@ $patchedMain = Join-Path $runtimeOutput 'main.js'
 & node --check $patchedMain
 if ($LASTEXITCODE -ne 0) { throw 'Patched Excalidraw client has invalid JavaScript syntax' }
 $patchedText = Get-Content -Raw -LiteralPath $patchedMain
-if (-not $patchedText.Contains('onLibraryChange:saveManagedLibrary') -or -not $patchedText.Contains('BG().catch(console.error);') -or -not $patchedText.Contains('window.name="ExcalidrawManager"+location.port') -or -not $patchedText.Contains('fetch("/library/import"')) {
-    throw 'Patched Excalidraw client is missing the library hook or bootstrap call'
+if (-not $patchedText.Contains('onLibraryChange:saveManagedLibrary') -or -not $patchedText.Contains('BG().catch(console.error);') -or -not $patchedText.Contains('window.name="ExcalidrawManager"+location.port') -or -not $patchedText.Contains('fetch("/library/import"') -or -not $patchedText.Contains('startFormulaOverlay')) {
+    throw 'Patched Excalidraw client is missing the library hook, formula overlay, or bootstrap call'
 }
 Copy-Item -Force (Join-Path $root 'runtime\server.mjs') (Join-Path $runtimeOutput 'server.mjs')
+Copy-Item -Force $formulaOverlaySource (Join-Path $runtimeOutput 'formula-overlay.mjs')
 Copy-Item -Force $formulaServerSource (Join-Path $runtimeOutput 'formula-server.mjs')
 Copy-Item -Force $formulaProviderSource (Join-Path $runtimeOutput 'formula-provider-registry.mjs')
+$formulaOcrProviderOutput = Join-Path $runtimeOutput 'formula-ocr-provider'
+if (Test-Path -LiteralPath $formulaOcrProviderOutput) {
+    Remove-Item -Recurse -Force -LiteralPath $formulaOcrProviderOutput
+}
+Copy-Item -Recurse -Force $formulaOcrProviderSource $formulaOcrProviderOutput
 $formulaEditorOutput = Join-Path $runtimeOutput 'formula-editor'
 if (Test-Path -LiteralPath $formulaEditorOutput) {
     Remove-Item -Recurse -Force -LiteralPath $formulaEditorOutput
 }
 Copy-Item -Recurse -Force $formulaEditorSource $formulaEditorOutput
+
+& $csc /nologo /target:winexe /optimize+ /codepage:65001 /out:$formulaCaptureOutput `
+    /reference:System.dll `
+    /reference:System.Drawing.dll `
+    /reference:System.Windows.Forms.dll `
+    $formulaCaptureSource
+if ($LASTEXITCODE -ne 0) { throw "Formula capture helper build failed with exit code $LASTEXITCODE" }
 
 & $csc /nologo /target:winexe /optimize+ /codepage:65001 /win32icon:$icon /out:$output `
     /reference:System.dll `
@@ -104,4 +129,5 @@ if ($LASTEXITCODE -ne 0) { throw "CLI build failed with exit code $LASTEXITCODE"
 Write-Host "Built $output"
 Write-Host "Built $cliOutput"
 Write-Host "Built managed Excalidraw runtime in $runtimeOutput"
+Write-Host "Built in-memory formula capture helper at $formulaCaptureOutput"
 Write-Host "Bundled offline formula editor in $formulaEditorOutput"

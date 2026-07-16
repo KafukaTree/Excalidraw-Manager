@@ -1,9 +1,10 @@
 import { createServer } from 'node:http';
+import { spawn } from 'node:child_process';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
 import { FormulaProviderRegistry, ProviderRegistryError } from './formula-provider-registry.mjs';
 
-const APP_VERSION = '0.3.0';
+const APP_VERSION = '0.4.0';
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
   const index = args.indexOf(name);
@@ -27,6 +28,13 @@ const defaultProviderConfig = process.env.LOCALAPPDATA
   : null;
 const providerConfig = option('--provider-config', defaultProviderConfig);
 const providers = new FormulaProviderRegistry(providerConfig);
+const captureHelperPath = resolve(option('--capture-helper', join(import.meta.dirname, 'FormulaCapture.exe')));
+const captureTimeoutMilliseconds = 120_000;
+const maximumCaptureBytes = 12 * 1024 * 1024;
+const maximumCaptureOutputBytes = 18 * 1024 * 1024;
+const maximumCaptureErrorBytes = 64 * 1024;
+let captureActive = false;
+let captureChild = null;
 
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -44,7 +52,7 @@ const mimeTypes = {
 };
 
 const securityHeaders = {
-  'Content-Security-Policy': "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:",
+  'Content-Security-Policy': "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:*; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:",
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Permissions-Policy': 'camera=(), geolocation=(), microphone=()',
   'Referrer-Policy': 'no-referrer',
@@ -85,13 +93,13 @@ function sendJson(res, status, value) {
   });
 }
 
-async function readJson(req, maximumBytes = 16 * 1024 * 1024) {
+async function readJson(req, maximumBytes = 20 * 1024 * 1024) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
     if (size > maximumBytes) {
-      const error = new Error('Request body exceeds the 16 MiB limit');
+      const error = new Error('Request body exceeds the 20 MiB limit');
       error.statusCode = 413;
       throw error;
     }
@@ -99,6 +107,204 @@ async function readJson(req, maximumBytes = 16 * 1024 * 1024) {
   }
   const text = Buffer.concat(chunks).toString('utf8');
   return text ? JSON.parse(text) : {};
+}
+
+class CaptureError extends Error {
+  constructor(code, message, statusCode) {
+    super(message);
+    this.name = 'CaptureError';
+    this.code = code;
+    this.statusCode = statusCode;
+  }
+}
+
+function createClientLifetime(req, res) {
+  const controller = new AbortController();
+  const abort = () => {
+    if (!controller.signal.aborted) controller.abort();
+  };
+  const close = () => {
+    if (!res.writableEnded) abort();
+  };
+  req.once('aborted', abort);
+  res.once('close', close);
+  if (req.aborted || res.destroyed) abort();
+  return {
+    signal: controller.signal,
+    cleanup() {
+      req.off('aborted', abort);
+      res.off('close', close);
+    },
+  };
+}
+
+function clientAbortError() {
+  return new CaptureError('REQUEST_ABORTED', 'The client disconnected', 499);
+}
+
+function validateCapturedImage(payload) {
+  if (!payload || typeof payload !== 'object') {
+    throw new CaptureError('CAPTURE_FAILED', 'Screen capture returned an invalid response', 502);
+  }
+  if (payload.cancelled === true) {
+    throw new CaptureError('CAPTURE_CANCELLED', 'Screen capture was cancelled', 409);
+  }
+  if (payload.cancelled !== false || payload.mimeType !== 'image/png' || typeof payload.image !== 'string') {
+    throw new CaptureError('CAPTURE_FAILED', 'Screen capture returned an invalid image', 502);
+  }
+  if (!Number.isInteger(payload.width) || !Number.isInteger(payload.height) ||
+      payload.width < 2 || payload.height < 2 || payload.width > 32_768 || payload.height > 32_768 ||
+      payload.width * payload.height > 40_000_000) {
+    throw new CaptureError('CAPTURE_FAILED', 'Screen capture dimensions are invalid', 502);
+  }
+  if (payload.image.length === 0 || payload.image.length % 4 !== 0 ||
+      !/^[A-Za-z0-9+/]*={0,2}$/.test(payload.image)) {
+    throw new CaptureError('CAPTURE_FAILED', 'Screen capture returned invalid base64 data', 502);
+  }
+
+  const decoded = Buffer.from(payload.image, 'base64');
+  if (decoded.length > maximumCaptureBytes) {
+    throw new CaptureError('CAPTURE_TOO_LARGE', 'Captured image exceeds the 12 MiB OCR limit', 413);
+  }
+  if (decoded.toString('base64') !== payload.image || decoded.length < 24 ||
+      !decoded.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) ||
+      decoded.readUInt32BE(16) !== payload.width || decoded.readUInt32BE(20) !== payload.height) {
+    throw new CaptureError('CAPTURE_FAILED', 'Screen capture returned an invalid PNG image', 502);
+  }
+
+  return {
+    image: {
+      kind: 'image',
+      mediaType: 'image/png',
+      dataBase64: payload.image,
+      width: payload.width,
+      height: payload.height,
+    },
+  };
+}
+
+async function runScreenCapture(signal = null) {
+  if (captureActive) {
+    throw new CaptureError('CAPTURE_BUSY', 'Another screen capture is already in progress', 409);
+  }
+  if (signal?.aborted) throw clientAbortError();
+  captureActive = true;
+
+  try {
+    try {
+      const helperInfo = await stat(captureHelperPath);
+      if (!helperInfo.isFile()) throw new Error('Capture helper is not a file');
+    } catch {
+      throw new CaptureError('CAPTURE_UNAVAILABLE', 'The screen capture helper is not installed', 503);
+    }
+    if (signal?.aborted) throw clientAbortError();
+
+    return await new Promise((resolveCapture, rejectCapture) => {
+      let settled = false;
+      let terminationError = null;
+      let timeout = null;
+      let outputSize = 0;
+      let errorSize = 0;
+      const output = [];
+      const errors = [];
+      let child;
+
+      const onAbort = () => requestStop(clientAbortError());
+
+      const finish = (error, value) => {
+        if (settled) return;
+        settled = true;
+        if (timeout) clearTimeout(timeout);
+        signal?.removeEventListener('abort', onAbort);
+        if (captureChild === child) captureChild = null;
+        if (error) rejectCapture(error);
+        else resolveCapture(value);
+      };
+
+      const requestStop = (error) => {
+        if (settled) return;
+        if (!terminationError) terminationError = error;
+        // Do not release captureActive here. The close event proves the helper and
+        // its stdout/stderr handles are gone before another picker may start.
+        if (!child || child.exitCode !== null) return;
+        try { child.kill(); } catch { /* The close/error events settle the request. */ }
+      };
+
+      try {
+        child = spawn(captureHelperPath, ['--parent-pid', String(process.pid), '--lang', defaultLanguage], {
+          cwd: import.meta.dirname,
+          shell: false,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          windowsHide: false,
+        });
+      } catch {
+        finish(new CaptureError('CAPTURE_UNAVAILABLE', 'The screen capture helper could not be started', 503));
+        return;
+      }
+      captureChild = child;
+
+      child.stdout.on('data', (chunk) => {
+        if (settled) return;
+        outputSize += chunk.length;
+        if (outputSize > maximumCaptureOutputBytes) {
+          requestStop(new CaptureError('CAPTURE_TOO_LARGE', 'Screen capture output exceeds the allowed size', 413));
+          return;
+        }
+        output.push(chunk);
+      });
+
+      child.stderr.on('data', (chunk) => {
+        if (settled || errorSize >= maximumCaptureErrorBytes) return;
+        const retained = chunk.subarray(0, maximumCaptureErrorBytes - errorSize);
+        errorSize += retained.length;
+        errors.push(retained);
+      });
+
+      child.once('error', () => {
+        if (!terminationError) {
+          terminationError = new CaptureError('CAPTURE_UNAVAILABLE', 'The screen capture helper could not be started', 503);
+        }
+      });
+
+      child.once('close', (code) => {
+        if (settled) return;
+        if (terminationError) {
+          finish(terminationError);
+          return;
+        }
+        if (code !== 0) {
+          const diagnostic = Buffer.concat(errors).toString('utf8').trim();
+          if (diagnostic) console.error(`Formula capture helper failed: ${diagnostic}`);
+          try {
+            const payload = JSON.parse(Buffer.concat(output).toString('utf8'));
+            if (['CAPTURE_DESKTOP_TOO_LARGE', 'CAPTURE_SELECTION_TOO_LARGE', 'CAPTURE_OUTPUT_TOO_LARGE'].includes(payload?.error)) {
+              finish(new CaptureError('CAPTURE_TOO_LARGE', 'Captured image exceeds safe OCR limits', 413));
+              return;
+            }
+          } catch { /* Fall through to the generic helper failure. */ }
+          finish(new CaptureError('CAPTURE_FAILED', 'Screen capture failed', 500));
+          return;
+        }
+        try {
+          const payload = JSON.parse(Buffer.concat(output).toString('utf8'));
+          finish(null, validateCapturedImage(payload));
+        } catch (error) {
+          finish(error instanceof CaptureError
+            ? error
+            : new CaptureError('CAPTURE_FAILED', 'Screen capture returned malformed output', 502));
+        }
+      });
+
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) onAbort();
+      timeout = setTimeout(() => {
+        requestStop(new CaptureError('CAPTURE_TIMEOUT', 'Screen capture timed out', 408));
+      }, captureTimeoutMilliseconds);
+      timeout.unref();
+    });
+  } finally {
+    captureActive = false;
+  }
 }
 
 function safeStaticPath(pathname) {
@@ -171,15 +377,45 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'POST' && url.pathname === '/api/capture') {
+      const lifetime = createClientLifetime(req, res);
+      try {
+        await readJson(req, 64 * 1024);
+        if (lifetime.signal.aborted) throw clientAbortError();
+        const result = await runScreenCapture(lifetime.signal);
+        if (lifetime.signal.aborted) throw clientAbortError();
+        sendJson(res, 200, result);
+      } finally {
+        lifetime.cleanup();
+      }
+      return;
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/recognize') {
-      const result = await providers.recognize(await readJson(req));
-      sendJson(res, 200, result);
+      const lifetime = createClientLifetime(req, res);
+      try {
+        const request = await readJson(req);
+        if (lifetime.signal.aborted) throw new ProviderRegistryError('REQUEST_ABORTED', 'The client disconnected', 499);
+        const result = await providers.recognize(request, lifetime.signal);
+        if (lifetime.signal.aborted) throw new ProviderRegistryError('REQUEST_ABORTED', 'The client disconnected', 499);
+        sendJson(res, 200, result);
+      } finally {
+        lifetime.cleanup();
+      }
       return;
     }
 
     if (req.method === 'POST' && url.pathname === '/api/warmup') {
-      const result = await providers.warmup(await readJson(req, 1024 * 1024));
-      sendJson(res, 200, result);
+      const lifetime = createClientLifetime(req, res);
+      try {
+        const request = await readJson(req, 1024 * 1024);
+        if (lifetime.signal.aborted) throw new ProviderRegistryError('REQUEST_ABORTED', 'The client disconnected', 499);
+        const result = await providers.warmup(request, lifetime.signal);
+        if (lifetime.signal.aborted) throw new ProviderRegistryError('REQUEST_ABORTED', 'The client disconnected', 499);
+        sendJson(res, 200, result);
+      } finally {
+        lifetime.cleanup();
+      }
       return;
     }
 
@@ -193,12 +429,20 @@ const server = createServer(async (req, res) => {
       'Content-Type': 'text/plain; charset=utf-8',
     });
   } catch (error) {
+    if (error?.code === 'REQUEST_ABORTED' || res.destroyed || res.writableEnded) return;
     if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
       send(res, 404, 'Not found', { 'Content-Type': 'text/plain; charset=utf-8' });
       return;
     }
     const status = error instanceof SyntaxError ? 400 : (error.statusCode || 500);
     if (status >= 500) console.error(error);
+    if (error instanceof CaptureError) {
+      sendJson(res, status, {
+        error: error.code,
+        message: error.message,
+      });
+      return;
+    }
     if (error instanceof ProviderRegistryError) {
       sendJson(res, status, {
         error: error.code,
@@ -220,6 +464,12 @@ const server = createServer(async (req, res) => {
 server.on('error', (error) => {
   console.error(error);
   process.exitCode = 1;
+});
+
+server.on('close', () => {
+  if (captureChild) {
+    try { captureChild.kill(); } catch { /* Process may already be closing. */ }
+  }
 });
 
 server.listen(port, host, () => {

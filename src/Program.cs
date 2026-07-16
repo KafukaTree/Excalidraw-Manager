@@ -10,6 +10,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.IO.Pipes;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -21,8 +22,8 @@ using System.Windows.Forms;
 [assembly: AssemblyDescription("Manage multiple local Excalidraw boards on Windows")]
 [assembly: AssemblyProduct("Excalidraw Manager")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Excalidraw Manager contributors")]
-[assembly: AssemblyVersion("0.3.0.0")]
-[assembly: AssemblyFileVersion("0.3.0.0")]
+[assembly: AssemblyVersion("0.4.0.0")]
+[assembly: AssemblyFileVersion("0.4.0.0")]
 
 namespace ExcalidrawManager
 {
@@ -144,6 +145,8 @@ namespace ExcalidrawManager
         public string Theme { get; set; }
         public string Language { get; set; }
         public bool TrayHintShown { get; set; }
+        public bool FormulaOcrEnabled { get; set; }
+        public string FormulaOcrRoot { get; set; }
         public List<string> RecentFiles { get; set; }
         public Dictionary<string, string> Aliases { get; set; }
 
@@ -153,6 +156,8 @@ namespace ExcalidrawManager
             StartPort = 6417;
             Theme = "system";
             Language = "system";
+            FormulaOcrEnabled = true;
+            FormulaOcrRoot = Environment.GetEnvironmentVariable("EXCALIDRAW_MANAGER_FORMULA_OCR_ROOT") ?? "";
             RecentFiles = new List<string>();
             Aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
@@ -176,6 +181,7 @@ namespace ExcalidrawManager
                 if (result.Roots == null) result.Roots = new List<string>();
                 if (result.RecentFiles == null) result.RecentFiles = new List<string>();
                 if (result.Aliases == null) result.Aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (result.FormulaOcrRoot == null) result.FormulaOcrRoot = "";
                 result.Language = Localization.NormalizePreference(result.Language);
                 return result;
             }
@@ -388,8 +394,14 @@ namespace ExcalidrawManager
 
         public static int FindFreePort(int start)
         {
+            return FindFreePort(start, 0);
+        }
+
+        public static int FindFreePort(int start, int excludedPort)
+        {
             var used = new HashSet<int>(IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Select(x => x.Port));
-            for (int port = Math.Max(1, start); port <= 65535; port++) if (!used.Contains(port)) return port;
+            for (int port = Math.Max(1, start); port <= 65535; port++)
+                if (port != excludedPort && !used.Contains(port)) return port;
             throw new InvalidOperationException(Localization.T("No free TCP port is available."));
         }
 
@@ -401,9 +413,25 @@ namespace ExcalidrawManager
             int port = requestedPort > 0 ? requestedPort : FindFreePort(6417);
             if (FindFreePort(port) != port) throw new InvalidOperationException(Localization.F("Port {0} is already in use.", port));
 
-            var psi = new ProcessStartInfo(_nodePath,
+            string formulaEditorUrl = null;
+            try
+            {
+                formulaEditorUrl = FormulaEditorService.EnsureStarted(
+                    Localization.Language,
+                    "http://localhost:" + port + "/");
+            }
+            catch
+            {
+                // Formula editing is an optional companion. A provider or editor startup
+                // failure must never prevent an existing board from opening.
+            }
+
+            string serverArguments =
                 Quote(_managedServerPath) + " " + Quote(filePath) + " --port " + port + " --theme " + theme +
-                " --public-dir " + Quote(_publicDir) + " --library " + Quote(SettingsStore.SharedLibraryPath));
+                " --public-dir " + Quote(_publicDir) + " --library " + Quote(SettingsStore.SharedLibraryPath);
+            if (!string.IsNullOrEmpty(formulaEditorUrl))
+                serverArguments += " --formula-url " + Quote(formulaEditorUrl);
+            var psi = new ProcessStartInfo(_nodePath, serverArguments);
             psi.UseShellExecute = false;
             psi.CreateNoWindow = true;
             psi.RedirectStandardOutput = true;
@@ -474,7 +502,7 @@ namespace ExcalidrawManager
                         {
                             if ((args[i] == "--port" || args[i] == "-p") && i + 1 < args.Count) { int.TryParse(args[++i], out port); continue; }
                             if ((args[i] == "--theme" || args[i] == "-t") && i + 1 < args.Count) { theme = args[++i]; continue; }
-                            if ((args[i] == "--public-dir" || args[i] == "--library") && i + 1 < args.Count) { i++; continue; }
+                            if ((args[i] == "--public-dir" || args[i] == "--library" || args[i] == "--formula-url") && i + 1 < args.Count) { i++; continue; }
                             if (args[i] == "--no-open") continue;
                             if (!args[i].StartsWith("-")) file = args[i];
                         }
@@ -538,24 +566,307 @@ namespace ExcalidrawManager
         }
     }
 
+    public sealed class ManagedFormulaOcrSession
+    {
+        public string ConfigPath { get; set; }
+        public string Token { get; set; }
+    }
+
+    public static class ManagedFormulaOcrService
+    {
+        public const string TokenVariable = "EXCALIDRAW_MANAGER_FORMULA_OCR_TOKEN";
+        private const int PreferredPort = 6527;
+        private static readonly object Sync = new object();
+        private static Process _process;
+        private static string _root;
+        private static string _configPath;
+        private static string _token;
+        private static int _port;
+
+        public static ManagedFormulaOcrSession EnsureStarted(string root, int excludedPort)
+        {
+            if (string.IsNullOrWhiteSpace(root)) return null;
+            string normalizedRoot;
+            try { normalizedRoot = Path.GetFullPath(Environment.ExpandEnvironmentVariables(root.Trim())); }
+            catch { return null; }
+
+            lock (Sync)
+            {
+                try
+                {
+                    if (IsReady(normalizedRoot))
+                        return new ManagedFormulaOcrSession { ConfigPath = _configPath, Token = _token };
+                    DropLocked();
+                    return StartLocked(normalizedRoot, excludedPort);
+                }
+                catch
+                {
+                    DropLocked();
+                    return null;
+                }
+            }
+        }
+
+        public static bool IsInstalled(string root)
+        {
+            if (string.IsNullOrWhiteSpace(root)) return false;
+            try
+            {
+                string normalizedRoot = Path.GetFullPath(Environment.ExpandEnvironmentVariables(root.Trim()));
+                string python = Path.Combine(normalizedRoot, "venv", "Scripts", "python.exe");
+                string modelRoot = Path.Combine(normalizedRoot, "models", "rapid-latex-ocr");
+                string providerDirectory = Path.Combine(Path.GetDirectoryName(typeof(ManagedFormulaOcrService).Assembly.Location), "runtime", "formula-ocr-provider");
+                string[] modelFiles = { "image_resizer.onnx", "encoder.onnx", "decoder.onnx", "tokenizer.json" };
+                return File.Exists(python) && File.Exists(Path.Combine(providerDirectory, "server.py")) &&
+                    File.Exists(Path.Combine(modelRoot, "manifest.json")) &&
+                    File.Exists(Path.Combine(normalizedRoot, "install-complete.json")) &&
+                    modelFiles.All(x => File.Exists(Path.Combine(modelRoot, x)));
+            }
+            catch { return false; }
+        }
+
+        public static bool IsReadyForRoot(string root)
+        {
+            if (string.IsNullOrWhiteSpace(root)) return false;
+            try
+            {
+                string normalizedRoot = Path.GetFullPath(Environment.ExpandEnvironmentVariables(root.Trim()));
+                lock (Sync) return IsReady(normalizedRoot);
+            }
+            catch { return false; }
+        }
+
+        public static void Stop()
+        {
+            lock (Sync) DropLocked();
+        }
+
+        private static ManagedFormulaOcrSession StartLocked(string root, int excludedPort)
+        {
+            string python = Path.Combine(root, "venv", "Scripts", "python.exe");
+            string modelRoot = Path.Combine(root, "models", "rapid-latex-ocr");
+            string providerDirectory = Path.Combine(Path.GetDirectoryName(typeof(ManagedFormulaOcrService).Assembly.Location), "runtime", "formula-ocr-provider");
+            string serverPath = Path.Combine(providerDirectory, "server.py");
+            if (!IsInstalled(root) || !File.Exists(python) || !File.Exists(serverPath))
+                return null;
+
+            string runDirectory = Path.Combine(root, "run");
+            string tempDirectory = Path.Combine(root, "temp");
+            string cacheDirectory = Path.Combine(root, "cache");
+            Directory.CreateDirectory(runDirectory);
+            Directory.CreateDirectory(tempDirectory);
+            Directory.CreateDirectory(cacheDirectory);
+            Directory.CreateDirectory(Path.Combine(cacheDirectory, "pip"));
+            Directory.CreateDirectory(Path.Combine(cacheDirectory, "torch"));
+            Directory.CreateDirectory(Path.Combine(cacheDirectory, "huggingface"));
+
+            int port = ProcessService.FindFreePort(PreferredPort, excludedPort);
+            string token = CreateToken();
+            string configPath = Path.Combine(runDirectory, "formula-providers.active.json");
+            var config = new Dictionary<string, object>
+            {
+                { "providers", new object[]
+                    {
+                        new Dictionary<string, object>
+                        {
+                            { "id", "rapid-latex-ocr-local" },
+                            { "name", "RapidLaTeXOCR Local" },
+                            { "baseUrl", "http://127.0.0.1:" + port },
+                            { "enabled", true },
+                            { "tokenEnv", TokenVariable }
+                        }
+                    }
+                }
+            };
+            File.WriteAllText(configPath, new JavaScriptSerializer().Serialize(config), new UTF8Encoding(false));
+
+            var arguments = new StringBuilder();
+            arguments.Append(Quote(serverPath));
+            arguments.Append(" --host 127.0.0.1 --port ").Append(port);
+            arguments.Append(" --model-root ").Append(Quote(modelRoot));
+            arguments.Append(" --parent-pid ").Append(Process.GetCurrentProcess().Id);
+            arguments.Append(" --token-env ").Append(TokenVariable);
+            var psi = new ProcessStartInfo(python, arguments.ToString())
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = providerDirectory
+            };
+            psi.EnvironmentVariables[TokenVariable] = token;
+            foreach (string variable in new[] { "PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE", "VIRTUAL_ENV" })
+                psi.EnvironmentVariables.Remove(variable);
+            psi.EnvironmentVariables["PYTHONNOUSERSITE"] = "1";
+            psi.EnvironmentVariables["PYTHONDONTWRITEBYTECODE"] = "1";
+            psi.EnvironmentVariables["TEMP"] = tempDirectory;
+            psi.EnvironmentVariables["TMP"] = tempDirectory;
+            psi.EnvironmentVariables["PIP_CACHE_DIR"] = Path.Combine(cacheDirectory, "pip");
+            psi.EnvironmentVariables["TORCH_HOME"] = Path.Combine(cacheDirectory, "torch");
+            psi.EnvironmentVariables["HF_HOME"] = Path.Combine(cacheDirectory, "huggingface");
+
+            Process process = null;
+            var error = new StringBuilder();
+            try
+            {
+                process = Process.Start(psi);
+                if (process == null) return null;
+                process.OutputDataReceived += delegate { };
+                process.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs e)
+                {
+                    if (e.Data == null) return;
+                    lock (error) if (error.Length < 8192) error.AppendLine(e.Data);
+                };
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+                bool ready = false;
+                var timer = Stopwatch.StartNew();
+                while (timer.Elapsed < TimeSpan.FromSeconds(12))
+                {
+                    if (process.HasExited) break;
+                    if (IsHttpReady(port, token)) { ready = true; break; }
+                    Thread.Sleep(100);
+                }
+                if (!ready)
+                {
+                    try { if (!process.HasExited) process.Kill(); } catch { }
+                    try { process.Dispose(); } catch { }
+                    return null;
+                }
+
+                _process = process;
+                _root = root;
+                _configPath = configPath;
+                _token = token;
+                _port = port;
+                process.EnableRaisingEvents = true;
+                process.Exited += delegate
+                {
+                    lock (Sync)
+                    {
+                        if (ReferenceEquals(_process, process))
+                        {
+                            _process = null;
+                            _root = null;
+                            _configPath = null;
+                            _token = null;
+                            _port = 0;
+                        }
+                    }
+                    try { process.Dispose(); } catch { }
+                };
+                return new ManagedFormulaOcrSession { ConfigPath = configPath, Token = token };
+            }
+            catch
+            {
+                try { if (process != null && !process.HasExited) process.Kill(); } catch { }
+                try { if (process != null) process.Dispose(); } catch { }
+                return null;
+            }
+        }
+
+        private static bool IsReady(string root)
+        {
+            try
+            {
+                return _process != null && !_process.HasExited && _port > 0 &&
+                    string.Equals(_root, root, StringComparison.OrdinalIgnoreCase) &&
+                    IsHttpReady(_port, _token);
+            }
+            catch { return false; }
+        }
+
+        private static bool IsHttpReady(int port, string token)
+        {
+            if (string.IsNullOrEmpty(token)) return false;
+            try
+            {
+                var request = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:" + port + "/v1/health");
+                request.Method = "GET";
+                request.Proxy = null;
+                request.AllowAutoRedirect = false;
+                request.Timeout = 400;
+                request.ReadWriteTimeout = 400;
+                request.Headers[HttpRequestHeader.Authorization] = "Bearer " + token;
+                using (var response = (HttpWebResponse)request.GetResponse())
+                using (var reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
+                {
+                    reader.ReadToEnd();
+                    return response.StatusCode == HttpStatusCode.OK;
+                }
+            }
+            catch { return false; }
+        }
+
+        private static void DropLocked()
+        {
+            var process = _process;
+            _process = null;
+            _root = null;
+            _configPath = null;
+            _token = null;
+            _port = 0;
+            if (process == null) return;
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill();
+                    process.WaitForExit(3000);
+                }
+            }
+            catch { }
+            finally { try { process.Dispose(); } catch { } }
+        }
+
+        private static string CreateToken()
+        {
+            var bytes = new byte[32];
+            using (var random = new RNGCryptoServiceProvider()) random.GetBytes(bytes);
+            return Convert.ToBase64String(bytes);
+        }
+
+        private static string Quote(string value) { return "\"" + value.Replace("\"", "\\\"") + "\""; }
+    }
+
     public static class FormulaEditorService
     {
         private const int PreferredPort = 6517;
         private static readonly object Sync = new object();
         private static Process _process;
         private static int _port;
+        private static bool _ocrEnabled = true;
+        private static string _ocrRoot = "";
+
+        public static void ConfigureOcr(bool enabled, string root)
+        {
+            lock (Sync)
+            {
+                _ocrEnabled = enabled;
+                _ocrRoot = root ?? "";
+            }
+        }
 
         public static string EnsureStarted(string language, string boardUrl)
         {
             string normalizedLanguage = string.Equals(language, "zh-CN", StringComparison.OrdinalIgnoreCase) ? "zh-CN" : "en";
             string normalizedBoardUrl = NormalizeBoardUrl(boardUrl);
+            int reservedBoardPort = 0;
+            if (!string.IsNullOrEmpty(normalizedBoardUrl))
+            {
+                try { reservedBoardPort = new Uri(normalizedBoardUrl).Port; } catch { }
+            }
 
             lock (Sync)
             {
-                if (!IsTrackedProcessReady())
+                bool restart = !IsTrackedProcessReady();
+                if (!restart && _ocrEnabled && ManagedFormulaOcrService.IsInstalled(_ocrRoot) &&
+                    !ManagedFormulaOcrService.IsReadyForRoot(_ocrRoot))
+                    restart = true;
+                if (restart)
                 {
                     DropTrackedProcess();
-                    Start(normalizedLanguage, normalizedBoardUrl);
+                    Start(normalizedLanguage, normalizedBoardUrl, reservedBoardPort);
                 }
                 return BuildEditorUrl(_port, normalizedLanguage, normalizedBoardUrl);
             }
@@ -582,8 +893,7 @@ namespace ExcalidrawManager
                 _port = 0;
             }
 
-            if (process == null) return;
-            try
+            if (process != null) try
             {
                 if (!process.HasExited)
                 {
@@ -593,9 +903,10 @@ namespace ExcalidrawManager
             }
             catch { }
             finally { try { process.Dispose(); } catch { } }
+            ManagedFormulaOcrService.Stop();
         }
 
-        private static void Start(string language, string boardUrl)
+        private static void Start(string language, string boardUrl, int reservedBoardPort)
         {
             string runtimeDirectory = Path.Combine(Path.GetDirectoryName(typeof(FormulaEditorService).Assembly.Location), "runtime");
             string serverPath = Path.Combine(runtimeDirectory, "formula-server.mjs");
@@ -605,7 +916,14 @@ namespace ExcalidrawManager
             if (!File.Exists(Path.Combine(assetsPath, "index.html")))
                 throw new InvalidOperationException(Localization.F("Formula editor assets are missing: {0}", assetsPath));
 
-            int port = ProcessService.FindFreePort(PreferredPort);
+            ManagedFormulaOcrSession ocrSession = null;
+            if (_ocrEnabled && !string.IsNullOrWhiteSpace(_ocrRoot))
+            {
+                try { ocrSession = ManagedFormulaOcrService.EnsureStarted(_ocrRoot, reservedBoardPort); }
+                catch { ocrSession = null; }
+            }
+
+            int port = ProcessService.FindFreePort(PreferredPort, reservedBoardPort);
             var arguments = new StringBuilder();
             arguments.Append(Quote(serverPath));
             arguments.Append(" --port ").Append(port);
@@ -613,6 +931,8 @@ namespace ExcalidrawManager
             arguments.Append(" --assets ").Append(Quote(assetsPath));
             arguments.Append(" --parent-pid ").Append(Process.GetCurrentProcess().Id);
             arguments.Append(" --lang ").Append(language);
+            if (ocrSession != null && !string.IsNullOrEmpty(ocrSession.ConfigPath))
+                arguments.Append(" --provider-config ").Append(Quote(ocrSession.ConfigPath));
             if (!string.IsNullOrEmpty(boardUrl)) arguments.Append(" --board-url ").Append(Quote(boardUrl));
 
             var psi = new ProcessStartInfo(ProcessService.NodePath, arguments.ToString())
@@ -623,6 +943,8 @@ namespace ExcalidrawManager
                 RedirectStandardError = true,
                 WorkingDirectory = runtimeDirectory
             };
+            if (ocrSession != null && !string.IsNullOrEmpty(ocrSession.Token))
+                psi.EnvironmentVariables[ManagedFormulaOcrService.TokenVariable] = ocrSession.Token;
             var process = Process.Start(psi);
             if (process == null) throw new InvalidOperationException(Localization.T("Failed to start formula editor."));
 
@@ -743,6 +1065,7 @@ namespace ExcalidrawManager
             _initialFile = initialFile;
             _settings = SettingsStore.Load();
             Localization.Configure(_settings.Language);
+            FormulaEditorService.ConfigureOcr(_settings.FormulaOcrEnabled, _settings.FormulaOcrRoot);
             Text = T("Excalidraw Manager");
             MinimumSize = new Size(980, 600);
             Size = new Size(1180, 720);
@@ -895,7 +1218,7 @@ namespace ExcalidrawManager
         private void ExitFromTray()
         {
             var answer = MessageBox.Show(
-                T("Yes: stop all excalidraw-edit services and exit.\r\nNo: keep services running and exit.\r\nCancel: return to the tray."),
+                T("Yes: stop all boards and formula services, then exit.\r\nNo: keep boards running and exit; the formula palette will stop.\r\nCancel: return to the tray."),
                 T("Exit Excalidraw Manager"), MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
             if (answer == DialogResult.Cancel) return;
             if (answer == DialogResult.Yes) ProcessService.StopAllDiscovered();
@@ -1211,11 +1534,15 @@ namespace ExcalidrawManager
 
         private async void StopAll()
         {
-            if (_instances.Count == 0) return;
-            if (MessageBox.Show(T("Stop all discovered excalidraw-edit Node processes?"), T("Stop all"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            if (MessageBox.Show(T("Stop all managed board and formula services?"), T("Stop all"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
             _status.Text = T("Stopping all services...");
-            int count = await Task.Run(() => ProcessService.StopAllDiscovered());
-            _status.Text = F("Stopped {0} service(s)", count);
+            int count = await Task.Run(() =>
+            {
+                int stoppedBoards = ProcessService.StopAllDiscovered();
+                FormulaEditorService.Stop();
+                return stoppedBoards;
+            });
+            _status.Text = F("Stopped {0} board service(s); formula services stopped", count);
             RefreshAll();
         }
 
@@ -1299,7 +1626,9 @@ namespace ExcalidrawManager
             try
             {
                 string nodeVersion = RunAndRead(ProcessService.NodePath, "--version").Trim();
-                MessageBox.Show("node.exe\r\n" + ProcessService.NodePath + "\r\n" + T("Version:") + " " + nodeVersion + "\r\n\r\nexcalidraw-edit\r\n" + ProcessService.CliPath + "\r\n" + T("Version:") + " " + ProcessService.CliVersion + "\r\n\r\n" + T("Managed runtime") + "\r\n" + ProcessService.ManagedServerPath + "\r\n\r\n" + T("Shared library") + "\r\n" + SettingsStore.SharedLibraryPath + "\r\n\r\n" + T("Settings") + "\r\n" + SettingsStore.FilePath,
+                string ocrRoot = string.IsNullOrWhiteSpace(_settings.FormulaOcrRoot) ? T("Not configured") : _settings.FormulaOcrRoot;
+                string ocrStatus = ManagedFormulaOcrService.IsInstalled(_settings.FormulaOcrRoot) ? T("Installed") : T("Not installed");
+                MessageBox.Show("node.exe\r\n" + ProcessService.NodePath + "\r\n" + T("Version:") + " " + nodeVersion + "\r\n\r\nexcalidraw-edit\r\n" + ProcessService.CliPath + "\r\n" + T("Version:") + " " + ProcessService.CliVersion + "\r\n\r\n" + T("Managed runtime") + "\r\n" + ProcessService.ManagedServerPath + "\r\n\r\n" + T("Formula OCR folder:") + " " + ocrStatus + "\r\n" + ocrRoot + "\r\n\r\n" + T("Shared library") + "\r\n" + SettingsStore.SharedLibraryPath + "\r\n\r\n" + T("Settings") + "\r\n" + SettingsStore.FilePath,
                     T("Environment"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex) { ShowError(ex); }
@@ -1400,30 +1729,51 @@ namespace ExcalidrawManager
         private void ShowSettings()
         {
             bool restartForLanguage = false;
+            bool restartFormulaServices = false;
             string selectedLanguage = _settings.Language;
-            using (var form = new Form { Width = 440, Height = 270, Text = T("Settings"), StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false })
+            using (var form = new Form { Width = 580, Height = 340, Text = T("Settings"), StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false })
             {
                 var portLabel = new Label { Left = 18, Top = 22, Width = 150, Text = T("Starting port:") };
-                var port = new NumericUpDown { Left = 175, Top = 18, Width = 220, Minimum = 1, Maximum = 65535, Value = Math.Max(1, Math.Min(65535, _settings.StartPort)) };
+                var port = new NumericUpDown { Left = 175, Top = 18, Width = 355, Minimum = 1, Maximum = 65535, Value = Math.Max(1, Math.Min(65535, _settings.StartPort)) };
                 var themeLabel = new Label { Left = 18, Top = 62, Width = 150, Text = T("Board theme:") };
-                var theme = new ComboBox { Left = 175, Top = 58, Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
+                var theme = new ComboBox { Left = 175, Top = 58, Width = 355, DropDownStyle = ComboBoxStyle.DropDownList };
                 var themeChoices = new[] { new LocalizedChoice("system", T("system")), new LocalizedChoice("dark", T("dark")), new LocalizedChoice("light", T("light")) };
                 theme.Items.AddRange(themeChoices); theme.SelectedItem = themeChoices.FirstOrDefault(x => x.Value == _settings.Theme) ?? themeChoices[0];
                 var languageLabel = new Label { Left = 18, Top = 102, Width = 150, Text = T("Interface language:") };
-                var language = new ComboBox { Left = 175, Top = 98, Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
+                var language = new ComboBox { Left = 175, Top = 98, Width = 355, DropDownStyle = ComboBoxStyle.DropDownList };
                 var languageChoices = new[] { new LocalizedChoice("system", T("Follow system")), new LocalizedChoice("zh-CN", T("Simplified Chinese")), new LocalizedChoice("en", T("English")) };
                 language.Items.AddRange(languageChoices); language.SelectedItem = languageChoices.FirstOrDefault(x => x.Value == _settings.Language) ?? languageChoices[0];
-                var ok = new Button { Text = T("Save"), Left = 235, Top = 155, Width = 75, DialogResult = DialogResult.OK };
-                var cancel = new Button { Text = T("Cancel"), Left = 318, Top = 155, Width = 75, DialogResult = DialogResult.Cancel };
-                form.Controls.AddRange(new Control[] { portLabel, port, themeLabel, theme, languageLabel, language, ok, cancel }); form.AcceptButton = ok; form.CancelButton = cancel;
+                var ocrEnabled = new CheckBox { Left = 18, Top = 143, Width = 512, Text = T("Automatically start local formula OCR when installed"), Checked = _settings.FormulaOcrEnabled };
+                var ocrRootLabel = new Label { Left = 18, Top = 180, Width = 150, Text = T("Formula OCR folder:") };
+                var ocrRoot = new TextBox { Left = 175, Top = 176, Width = 280, Text = _settings.FormulaOcrRoot ?? "" };
+                var browseOcr = new Button { Left = 463, Top = 175, Width = 67, Height = 25, Text = T("Browse...") };
+                browseOcr.Click += delegate
+                {
+                    using (var dialog = new FolderBrowserDialog { Description = T("Choose the D-drive folder containing the local formula OCR environment"), ShowNewFolderButton = true, SelectedPath = Directory.Exists(ocrRoot.Text) ? ocrRoot.Text : "" })
+                        if (dialog.ShowDialog(form) == DialogResult.OK) ocrRoot.Text = dialog.SelectedPath;
+                };
+                var ocrHint = new Label { Left = 175, Top = 207, Width = 355, Height = 34, ForeColor = Color.DimGray, Text = T("Models, Python packages, caches and temporary files stay under this folder.") };
+                var ok = new Button { Text = T("Save"), Left = 370, Top = 255, Width = 75, DialogResult = DialogResult.OK };
+                var cancel = new Button { Text = T("Cancel"), Left = 455, Top = 255, Width = 75, DialogResult = DialogResult.Cancel };
+                form.Controls.AddRange(new Control[] { portLabel, port, themeLabel, theme, languageLabel, language, ocrEnabled, ocrRootLabel, ocrRoot, browseOcr, ocrHint, ok, cancel }); form.AcceptButton = ok; form.CancelButton = cancel;
                 if (form.ShowDialog(this) == DialogResult.OK)
                 {
                     _settings.StartPort = (int)port.Value;
                     _settings.Theme = ((LocalizedChoice)theme.SelectedItem).Value;
                     selectedLanguage = ((LocalizedChoice)language.SelectedItem).Value;
                     restartForLanguage = !string.Equals(selectedLanguage, _settings.Language, StringComparison.OrdinalIgnoreCase);
+                    string selectedOcrRoot = (ocrRoot.Text ?? "").Trim();
+                    restartFormulaServices = _settings.FormulaOcrEnabled != ocrEnabled.Checked ||
+                        !string.Equals(_settings.FormulaOcrRoot ?? "", selectedOcrRoot, StringComparison.OrdinalIgnoreCase);
+                    _settings.FormulaOcrEnabled = ocrEnabled.Checked;
+                    _settings.FormulaOcrRoot = selectedOcrRoot;
                     _settings.Language = selectedLanguage;
                     SettingsStore.Save(_settings);
+                    if (restartFormulaServices)
+                    {
+                        FormulaEditorService.Stop();
+                        FormulaEditorService.ConfigureOcr(_settings.FormulaOcrEnabled, _settings.FormulaOcrRoot);
+                    }
                 }
             }
             if (restartForLanguage)

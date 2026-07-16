@@ -10,8 +10,8 @@ using ExcalidrawManager;
 [assembly: AssemblyDescription("Command-line companion for Excalidraw Manager")]
 [assembly: AssemblyProduct("Excalidraw Manager")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Excalidraw Manager contributors")]
-[assembly: AssemblyVersion("0.3.0.0")]
-[assembly: AssemblyFileVersion("0.3.0.0")]
+[assembly: AssemblyVersion("0.4.0.0")]
+[assembly: AssemblyFileVersion("0.4.0.0")]
 
 internal static class ExcalidrawManagerCli
 {
@@ -20,7 +20,7 @@ internal static class ExcalidrawManagerCli
         Localization.Configure("system");
         if (args.Length == 0 || string.Equals(args[0], "help", StringComparison.OrdinalIgnoreCase) || args[0] == "--help" || args[0] == "-h")
         {
-            Console.WriteLine("Excalidraw Manager 0.3.0");
+            Console.WriteLine("Excalidraw Manager 0.4.0");
             Console.WriteLine(Localization.T("Usage:"));
             Console.WriteLine("  excalidraw-manager                         " + Localization.T("Open the GUI"));
             Console.WriteLine("  excalidraw-manager <board.excalidraw>      " + Localization.T("Open a board through the GUI"));
@@ -29,7 +29,7 @@ internal static class ExcalidrawManagerCli
             return 0;
         }
 
-        if (args[0] == "--version" || args[0] == "-V") { Console.WriteLine("0.3.0"); return 0; }
+        if (args[0] == "--version" || args[0] == "-V") { Console.WriteLine("0.4.0"); return 0; }
 
         if (string.Equals(args[0], "list", StringComparison.OrdinalIgnoreCase))
         {

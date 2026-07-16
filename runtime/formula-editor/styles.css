@@ -13,6 +13,11 @@
   --success: #16845b;
   --success-soft: #e6f7f0;
   --danger: #c43d4b;
+  --syntax-command: #7357d9;
+  --syntax-comment: #548159;
+  --syntax-number: #b35309;
+  --syntax-bracket: #087ea4;
+  --syntax-operator: #b4236a;
   --shadow: 0 12px 36px rgba(44, 62, 95, .08);
   --formula-color: #1b1f2a;
   --preview-background: transparent;
@@ -34,24 +39,32 @@
   --success: #5fd5a6;
   --success-soft: #173c32;
   --danger: #ff8291;
+  --syntax-command: #c4a7ff;
+  --syntax-comment: #7fc786;
+  --syntax-number: #ffb86c;
+  --syntax-bracket: #66d9ef;
+  --syntax-operator: #ff79c6;
   --shadow: 0 14px 42px rgba(0, 0, 0, .24);
   --formula-color: #f4f6fa;
 }
 
 * { box-sizing: border-box; }
 
-html { min-width: 320px; background: var(--bg); }
+html { min-width: 0; max-width: 100%; overflow-x: hidden; background: var(--bg); }
 
 body {
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
   min-height: 100vh;
+  overflow-x: hidden;
   color: var(--text);
   background:
     radial-gradient(circle at 5% -20%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 30rem),
     var(--bg);
 }
 
-button, input, select, textarea { font: inherit; }
+button, input, select, textarea { max-width: 100%; font: inherit; }
 
 button { color: inherit; }
 
@@ -120,6 +133,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .page-shell {
   width: min(1440px, calc(100% - 36px));
+  min-width: 0;
   margin: 22px auto 32px;
   display: grid;
   gap: 20px;
@@ -132,6 +146,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   box-shadow: var(--shadow);
   overflow: clip;
 }
+.input-card { position: relative; z-index: 2; overflow: visible; }
 
 .card-heading {
   min-height: 72px;
@@ -195,10 +210,12 @@ select, input[type="text"] {
   display: flex;
   gap: 5px;
   border-bottom: 1px solid var(--line);
-  overflow-x: auto;
+  flex-wrap: wrap;
+  overflow-x: hidden;
 }
 .feature-tab {
-  min-width: max-content;
+  min-width: 0;
+  flex: 1 1 110px;
   padding: 14px 13px 12px;
   color: var(--muted);
   background: transparent;
@@ -211,50 +228,102 @@ select, input[type="text"] {
 .feature-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
 .feature-panel { padding: 16px 20px; border-bottom: 1px solid var(--line); }
-.tool-groups { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; }
-.tool-group { min-width: 176px; }
-.tool-group h3 { margin: 0 0 8px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
-.symbol-grid { display: grid; grid-template-columns: repeat(3, 52px); gap: 6px; }
+#quick-panel { position: relative; z-index: 20; padding: 9px 12px; overflow: visible; }
+.tool-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  overflow-x: hidden;
+  padding: 1px;
+}
+.tool-trigger {
+  min-width: 0;
+  height: 38px;
+  padding: 3px 8px 3px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 78px;
+  color: var(--muted);
+  background: var(--card-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+}
+.tool-trigger-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-trigger:hover, .tool-trigger:focus-visible, .tool-trigger.active {
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--line));
+}
+.tool-trigger-icon {
+  min-width: 22px;
+  color: var(--text);
+  text-align: center;
+  font: 18px/1 "Cambria Math", "STIX Two Math", Georgia, serif;
+}
+.tool-trigger.active .tool-trigger-icon { color: var(--primary); }
+.tool-trigger-caret { font-size: 8px; opacity: .75; transition: transform .12s ease; }
+.tool-trigger.active .tool-trigger-caret { transform: rotate(180deg); }
+.quick-popover {
+  position: absolute;
+  z-index: 50;
+  width: min(510px, calc(100% - 16px));
+  max-height: min(330px, calc(100vh - 120px));
+  padding: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: var(--text);
+  background: color-mix(in srgb, var(--card) 96%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow: 0 14px 38px rgba(23, 32, 51, .22);
+  backdrop-filter: blur(12px);
+}
+.quick-popover-heading {
+  position: sticky;
+  top: -6px;
+  z-index: 1;
+  min-height: 32px;
+  margin: -2px -2px 5px;
+  padding: 5px 5px 4px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+.quick-popover-heading button {
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 18px;
+}
+.quick-popover-heading button:hover { color: var(--primary); background: var(--primary-soft); }
+.symbol-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 5px; }
 .symbol-button {
-  height: 48px;
-  padding: 2px;
+  min-width: 0;
+  height: 38px;
+  padding: 2px 3px;
   color: var(--text);
   background: var(--card-soft);
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: 6px;
   cursor: pointer;
-  font: 19px "Cambria Math", Georgia, serif;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 17px "Cambria Math", "STIX Two Math", Georgia, serif;
 }
 .symbol-button:hover { color: var(--primary); background: var(--primary-soft); border-color: var(--primary); transform: translateY(-1px); }
-
-.template-layout { display: grid; grid-template-columns: 150px 1fr; gap: 16px; min-height: 180px; }
-.template-categories { display: flex; flex-direction: column; gap: 5px; border-right: 1px solid var(--line); padding-right: 12px; }
-.template-categories button {
-  padding: 8px 10px;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  border-radius: 7px;
-  cursor: pointer;
-}
-.template-categories button:hover, .template-categories button.active { color: var(--primary); background: var(--primary-soft); }
-.template-grid { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 9px; }
-.template-button {
-  min-height: 76px;
-  padding: 9px 11px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 6px;
-  text-align: left;
-  background: var(--card-soft);
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  cursor: pointer;
-}
-.template-button:hover { border-color: var(--primary); background: var(--primary-soft); }
-.template-button strong { font-size: 12px; }
-.template-button code { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 
 .recognition-panel { display: grid; gap: 14px; }
 .model-notice {
@@ -334,22 +403,84 @@ select, input[type="text"] {
 
 .editor-shell { padding: 18px 20px 20px; }
 .editor-pane > label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 12px; font-weight: 650; }
-#latex-source {
+.source-code-editor { position: relative; }
+#latex-source, .source-highlight {
   width: 100%;
   min-height: 178px;
-  resize: vertical;
   padding: 16px;
-  color: var(--text);
-  background: var(--card-soft);
   border: 1px solid var(--line-strong);
   border-radius: 10px;
   font: 15px/1.65 "Cascadia Code", Consolas, monospace;
   tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
-#latex-source:focus { background: var(--card); border-color: var(--primary); }
+.source-highlight {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--text);
+  background: var(--card-soft);
+}
+.source-highlight code { font: inherit; }
+.syntax-command { color: var(--syntax-command); font-weight: 650; }
+.syntax-comment { color: var(--syntax-comment); font-style: italic; }
+.syntax-number { color: var(--syntax-number); }
+.syntax-bracket { color: var(--syntax-bracket); font-weight: 700; }
+.syntax-operator { color: var(--syntax-operator); }
+#latex-source {
+  position: relative;
+  z-index: 1;
+  resize: vertical;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--text);
+  background: transparent;
+  overflow-x: hidden;
+}
+#latex-source::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); opacity: .72; }
+#latex-source::selection { background: color-mix(in srgb, var(--primary) 27%, transparent); }
+#latex-source:focus { border-color: var(--primary); }
+.source-code-editor:focus-within .source-highlight { background: var(--card); }
+.command-suggestions {
+  position: absolute;
+  z-index: 20;
+  width: min(340px, calc(100% - 16px));
+  max-height: 238px;
+  padding: 5px;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  box-shadow: 0 12px 32px rgba(23, 32, 51, .2);
+}
+.command-suggestion {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 9px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.command-suggestion[aria-selected="true"], .command-suggestion:hover { color: var(--primary); background: var(--primary-soft); }
+.command-suggestion code { overflow: hidden; text-overflow: ellipsis; color: inherit; font: 13px "Cascadia Code", Consolas, monospace; white-space: nowrap; }
+.command-suggestion span { color: var(--muted); font-size: 11px; white-space: nowrap; }
 math-field {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 178px;
+  overflow-x: hidden;
   padding: 24px;
   color: var(--formula-color);
   background: var(--card-soft);
@@ -360,7 +491,8 @@ math-field {
   --selection-background-color: color-mix(in srgb, var(--primary) 24%, transparent);
   --contains-highlight-background-color: color-mix(in srgb, var(--primary) 12%, transparent);
 }
-.editor-footer { margin-top: 6px; min-height: 18px; display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
+.editor-footer { margin-top: 6px; min-height: 18px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 3px 10px; color: var(--muted); font-size: 11px; }
+.editor-footer > * { min-width: 0; overflow-wrap: anywhere; }
 
 .output-heading { padding-top: 13px; padding-bottom: 13px; }
 .zoom-control { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
@@ -374,7 +506,8 @@ math-field {
   padding: 30px;
   display: grid;
   place-items: center;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   background:
     linear-gradient(45deg, color-mix(in srgb, var(--line) 34%, transparent) 25%, transparent 25%),
     linear-gradient(-45deg, color-mix(in srgb, var(--line) 34%, transparent) 25%, transparent 25%),
@@ -389,8 +522,8 @@ math-field {
 .preview-placeholder { text-align: center; color: var(--muted); }
 .preview-placeholder > span { opacity: .13; font: italic 74px Georgia, serif; }
 .preview-placeholder p { margin: 8px 0 0; font-size: 12px; }
-.math-preview { color: var(--formula-color); transform-origin: center; transition: transform .15s ease; }
-.math-preview svg { max-width: none; }
+.math-preview { max-width: 100%; color: var(--formula-color); transition: width .15s ease; }
+.math-preview svg { display: block; max-width: 100%; height: auto; }
 #measurement-host { position: fixed; left: -100000px; top: 0; visibility: hidden; pointer-events: none; }
 
 .export-bar { padding: 16px 20px; display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--line); }
@@ -416,8 +549,8 @@ math-field {
 .download-menu button:hover { background: var(--primary-soft); color: var(--primary); }
 
 .code-output { padding: 0 20px 20px; }
-.code-tabs { display: flex; gap: 3px; overflow-x: auto; border-bottom: 1px solid var(--line); }
-.code-tabs button { padding: 12px 11px 9px; color: var(--muted); background: transparent; border: 0; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; font-size: 12px; }
+.code-tabs { display: flex; flex-wrap: wrap; gap: 3px; overflow-x: hidden; border-bottom: 1px solid var(--line); }
+.code-tabs button { min-width: 0; flex: 1 1 92px; padding: 12px 11px 9px; color: var(--muted); background: transparent; border: 0; border-bottom: 2px solid transparent; cursor: pointer; white-space: normal; font-size: 12px; }
 .code-tabs button.active { color: var(--primary); border-bottom-color: var(--primary); }
 .code-box { position: relative; margin-top: 10px; }
 #code-value { width: 100%; min-height: 108px; resize: vertical; padding: 13px 110px 13px 13px; color: var(--text); background: var(--card-soft); border: 1px solid var(--line); border-radius: 9px; font: 12px/1.55 "Cascadia Code", Consolas, monospace; }
@@ -443,8 +576,78 @@ footer { padding: 0 18px 28px; display: flex; justify-content: center; gap: 8px;
 .toast.visible { opacity: 1; transform: translate(-50%, 0); }
 .toast.error { background: #a42534; }
 
+html.compact-mode { width: 100%; min-width: 0; overflow-x: hidden; }
+.compact-mode body { min-width: 0; min-height: 0; overflow-x: hidden; background: var(--bg); }
+.compact-mode .app-header,
+.compact-mode .input-card > .card-heading,
+.compact-mode .feature-tabs,
+.compact-mode #image-panel,
+.compact-mode #document-panel,
+.compact-mode .edit-toolbar,
+.compact-mode .output-heading,
+.compact-mode .export-options,
+.compact-mode .split-export,
+.compact-mode .code-output,
+.compact-mode #board-button,
+.compact-mode footer { display: none !important; }
+.compact-mode .page-shell {
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 8px;
+  gap: 8px;
+}
+.compact-mode .card,
+.compact-mode .editor-shell,
+.compact-mode .editor-pane,
+.compact-mode .source-code-editor { min-width: 0; max-width: 100%; }
+.compact-mode .card { border-radius: 10px; box-shadow: none; }
+.compact-mode #quick-panel { display: block; padding: 5px 7px; border-bottom: 1px solid var(--line); }
+.compact-mode .tool-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(38px, 1fr));
+  gap: 4px;
+  overflow: visible;
+  padding-bottom: 1px;
+}
+.compact-mode .tool-trigger { width: 100%; height: 30px; padding: 2px 4px; justify-content: center; gap: 2px; border-radius: 6px; font-size: 10px; }
+.compact-mode .tool-trigger-icon { min-width: 20px; font-size: 16px; }
+.compact-mode .tool-trigger-label { display: none; }
+.compact-mode .tool-trigger-caret { font-size: 7px; }
+.compact-mode .quick-popover { width: min(440px, calc(100% - 12px)); max-height: min(280px, calc(100vh - 76px)); padding: 5px; }
+.compact-mode .quick-popover-heading { top: -5px; margin: -1px -1px 4px; }
+.compact-mode .symbol-grid { grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 4px; }
+.compact-mode .symbol-button { height: 34px; font-size: 16px; }
+.compact-mode .editor-shell { padding: 10px 10px 8px; }
+.compact-mode .editor-pane > label { margin-bottom: 5px; }
+.compact-mode #latex-source,
+.compact-mode .source-highlight { min-height: 118px; padding: 12px; font-size: 14px; }
+.compact-mode .editor-footer { margin-top: 4px; }
+.compact-mode .preview-stage {
+  min-height: 112px;
+  max-height: 230px;
+  margin: 8px;
+  padding: 14px;
+  border-radius: 8px;
+}
+.compact-mode .preview-placeholder > span { font-size: 44px; }
+.compact-mode .export-bar { padding: 0 8px 8px; border: 0; }
+.compact-mode .export-actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.compact-mode #capture-ocr,
+.compact-mode #copy-svg { width: 100%; min-width: 0; min-height: 34px; padding-left: 7px; padding-right: 7px; }
+
+@media (min-width: 720px) {
+  .compact-mode .tool-groups { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+  .compact-mode .tool-trigger-label { display: inline; }
+}
+
+@media (max-width: 300px) {
+  .compact-mode .command-suggestion { grid-template-columns: minmax(0, 1fr); }
+  .compact-mode .command-suggestion span { display: none; }
+}
+
 @media (max-width: 900px) {
-  .template-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
   .export-bar { align-items: stretch; flex-direction: column; }
   .export-actions { justify-content: flex-start; }
   .document-roadmap { grid-template-columns: 1fr; }
@@ -458,10 +661,6 @@ footer { padding: 0 18px 28px; display: flex; justify-content: center; gap: 8px;
   .page-shell { width: calc(100% - 20px); margin-top: 10px; }
   .card-heading, .feature-panel, .edit-toolbar, .editor-shell { padding-left: 13px; padding-right: 13px; }
   .card-heading p { display: none; }
-  .template-layout { grid-template-columns: 1fr; }
-  .template-categories { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 9px; }
-  .template-categories button { white-space: nowrap; }
-  .template-grid { grid-template-columns: 1fr; }
   .model-notice { grid-template-columns: auto 1fr; }
   .status-pill { grid-column: 2; justify-self: start; }
   .mode-switch { width: 100%; margin-left: 0; }
