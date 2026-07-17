@@ -2,6 +2,10 @@
 
 简体中文 | [English](README.md)
 
+> **长期跨平台产品线：**本分支与仅维护原 Windows 版的 `main` 分支独立演进，
+> 两条产品线禁止互相整支合并。确需共享的修复只能在审查后逐个 `cherry-pick`
+> 提交。详细规则见 [BRANCH_POLICY.md](BRANCH_POLICY.md)。
+
 Excalidraw Manager 0.5 正在迁移为 macOS、Windows、Linux 共用的桌面软件，
 用于集中管理并运行多个本地 `.excalidraw` 画板。新版采用 Tauri 2、React、
 TypeScript 和 Rust，同时复用原有的本地画板、公式编辑器与共享素材库运行时。

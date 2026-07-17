@@ -2,6 +2,11 @@
 
 [简体中文](README.zh-CN.md) | English
 
+> **Long-lived cross-platform product line:** this branch is maintained
+> independently from the Windows-only `main` branch. Do not merge either
+> product-line branch into the other. Transfer reviewed fixes only by
+> cherry-picking individual commits. See [BRANCH_POLICY.md](BRANCH_POLICY.md).
+
 Excalidraw Manager 0.5 is being migrated into one desktop application for
 macOS, Windows, and Linux. It uses Tauri 2, React, TypeScript, and Rust while
 reusing the existing local board, formula editor, and shared-library runtimes.
