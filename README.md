@@ -2,10 +2,12 @@
 
 [简体中文](README.zh-CN.md) | English
 
-Excalidraw Manager is a lightweight Windows 10/11 desktop application for
-organizing and running multiple local `.excalidraw` boards. It adds a native
-WinForms manager, process controls, a system tray, and one shared local library
-on top of [`excalidraw-edit`](https://github.com/wh1le/excalidraw-edit).
+Excalidraw Manager 0.5 is being migrated into one desktop application for
+macOS, Windows, and Linux. It uses Tauri 2, React, TypeScript, and Rust while
+reusing the existing local board, formula editor, and shared-library runtimes.
+
+The original Windows WinForms implementation remains in the repository while
+advanced features are migrated.
 
 The application is local-first: boards and settings stay on your computer.
 Managed board servers listen only on `127.0.0.1`.
@@ -13,7 +15,20 @@ Managed board servers listen only on `127.0.0.1`.
 > This is an independent project and is not affiliated with or endorsed by
 > Excalidraw.
 
-## Features
+## Cross-platform 0.5
+
+- Native macOS `.app` / `.dmg` builds with a shared Windows and Linux code path.
+- Multiple workspaces with local board and folder browsing and creation.
+- Multiple isolated local board services with PID, port, open, and stop controls.
+- One local Excalidraw library shared by every managed board.
+- Local formula editor, in-board formula palette, tray, single instance, and a
+  global shortcut.
+- Local-first storage with services bound only to `127.0.0.1`.
+
+See the [cross-platform development guide](docs/cross-platform-development.md)
+for architecture, macOS setup, commands, and the current support matrix.
+
+## Legacy Windows 0.4 features
 
 - Manage multiple workspace roots with a lazy-loaded `.excalidraw` file tree.
 - Create boards and folders without leaving the application.
@@ -57,7 +72,7 @@ canvas.
   <img src="assets/screenshots/excalidraw-note.gif" alt="Editing a local note in Excalidraw" width="1200">
 </p>
 
-## Supported environment
+## Legacy Windows environment
 
 | Component | Requirement |
 | --- | --- |
@@ -84,7 +99,7 @@ rendering do not require a network connection.
 Formula OCR is optional. Its Python environment and model weights are not
 bundled in the application, source repository, or release package.
 
-## Quick start from source
+## Legacy Windows quick start
 
 1. Install Node.js, then open a **new** PowerShell window.
 2. Install the compatible editor globally:
@@ -120,7 +135,7 @@ The default installation directory is:
 `install.ps1` adds this directory to the current user's `PATH`. It does not
 require administrator rights.
 
-## Install a prebuilt package
+## Legacy Windows prebuilt package
 
 If a package already contains the tested files and directories below, it can be
 installed without recompiling:
@@ -148,7 +163,7 @@ For portable use, keep the complete `dist` directory together and launch
 `dist\ExcalidrawManager.exe`. The `runtime` directory must remain beside the
 executable.
 
-## Usage
+## Legacy Windows usage
 
 The GUI can add one or more workspace roots. Double-click a board or use the
 toolbar to start it, then open its local URL in your default browser. Use
@@ -168,7 +183,7 @@ excalidraw-manager --version
 Be careful with `stop-all`: it also stops compatible `excalidraw-edit`
 processes launched outside this manager.
 
-## Local formula editor (0.4.0)
+## Local formula editor (0.5.0)
 
 Choose **Formula editor** on the manager toolbar or in the system-tray menu.
 The manager starts a service bound to `127.0.0.1` and opens the editor in your
@@ -210,19 +225,30 @@ and applies the first LaTeX candidate to the input for review. The full editor's
 and reviewing multiple candidates. While the board, embedded palette, or detached
 formula window has focus, press `Ctrl+Alt+O` (or choose **Capture OCR**) to drag
 around any screen region and recognize it immediately. This is intentionally a
-window-level shortcut and does not take over a Windows global hotkey. The native picker
-captures and transfers PNG data in memory; it does not create a screenshot file
-in the Windows Screenshots folder or elsewhere. Editing, rendering, and export
-remain fully usable when OCR is not installed.
+window-level shortcut and does not take over an operating system global hotkey.
+On Windows, the native picker transfers PNG data in memory. On macOS, Apple's
+picker writes only to a private temporary directory; the helper streams that PNG
+to the local formula service and removes it immediately. Neither platform writes
+to the user's Screenshots folder. The first macOS capture may ask for **System
+Settings → Privacy & Security → Screen Recording** access. Editing, rendering,
+and export remain fully usable when OCR is not installed.
 
 ### Optional local RapidLaTeXOCR provider
 
-Version 0.4.0 includes the provider adapter and an explicit installation script,
+Version 0.5.0 includes the provider adapter and an explicit installation script,
 but it does **not** bundle a Python environment or model weights and never
-downloads them merely by starting the manager. To install the optional CPU-only
-RapidLaTeXOCR 0.0.9 provider on the D drive, first install 64-bit Python
-3.10-3.12 on that drive, ensure the Microsoft Visual C++ 2019-or-newer x64
-runtime is present, review the upstream model terms, and then run:
+downloads them merely by starting the manager. On macOS or Linux, install
+64-bit Python 3.10-3.12, review the upstream model terms, and run:
+
+```bash
+./scripts/install-formula-ocr.sh \
+  --install-root "$HOME/Library/Application Support/Excalidraw Manager/FormulaOCR" \
+  --python "$(command -v python3)" \
+  --accept-upstream-model-license
+```
+
+On Windows, ensure the Microsoft Visual C++ 2019-or-newer x64 runtime is
+present, then run:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-formula-ocr.ps1 `
@@ -344,6 +370,7 @@ runtime/formula-editor/         Formula editor UI and bundled math assets
 scripts/install-formula-ocr.ps1 Explicit optional OCR installer
 src/                            WinForms GUI and command-line launcher
 src/FormulaCapture.cs           In-memory Windows region picker used by capture OCR
+runtime/FormulaCapture          Private-temporary-file macOS region picker
 tests/                          PowerShell integration tests
 build.ps1                       Reproducible local build
 check-environment.ps1           Prerequisite diagnostics

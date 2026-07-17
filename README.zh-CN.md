@@ -2,17 +2,30 @@
 
 简体中文 | [English](README.md)
 
-Excalidraw Manager 是一个面向 Windows 10/11 的轻量桌面软件，用于集中管理并
-运行多个本地 `.excalidraw` 画板。它在
-[`excalidraw-edit`](https://github.com/wh1le/excalidraw-edit) 的基础上提供
-WinForms 图形界面、进程控制、系统托盘以及跨画板共享的本地素材库。
+Excalidraw Manager 0.5 正在迁移为 macOS、Windows、Linux 共用的桌面软件，
+用于集中管理并运行多个本地 `.excalidraw` 画板。新版采用 Tauri 2、React、
+TypeScript 和 Rust，同时复用原有的本地画板、公式编辑器与共享素材库运行时。
+
+原 Windows WinForms 版本仍保留在仓库中，方便迁移尚未覆盖的高级能力。
 
 软件以本地使用为主：画板和设置保存在你的电脑上，受管理的画板服务仅监听
 `127.0.0.1`。
 
 > 本项目是独立项目，与 Excalidraw 官方不存在隶属或背书关系。
 
-## 功能
+## 0.5 跨平台版本
+
+- 原生 macOS `.app` / `.dmg` 构建，并为 Windows、Linux 保留统一代码路径。
+- 添加多个工作区，按需浏览、创建和管理本地画板与文件夹。
+- 在隔离的本机端口启动多个画板，并管理 PID、端口、打开与停止操作。
+- 所有画板共享一个本机 Excalidraw 素材库。
+- 本地公式编辑器、画板内公式面板、系统托盘、单实例和全局快捷键。
+- 设置、素材库和画板均留在本机；服务只监听 `127.0.0.1`。
+
+macOS 开发、架构和当前平台支持情况见
+[跨平台开发指南](docs/cross-platform-development.md)。
+
+## 0.4 Windows 旧版功能
 
 - 添加多个工作区，并按需加载其中的 `.excalidraw` 文件树。
 - 直接在软件中创建画板和文件夹。
@@ -53,7 +66,7 @@ WinForms 图形界面、进程控制、系统托盘以及跨画板共享的本�
   <img src="assets/screenshots/excalidraw-note.gif" alt="在 Excalidraw 中编辑本地笔记" width="1200">
 </p>
 
-## 支持的环境
+## 旧版 Windows 环境
 
 | 组件 | 要求 |
 | --- | --- |
@@ -79,7 +92,7 @@ Node.js 和 `excalidraw-edit` 属于外部前置依赖，不会打包进 EXE 或
 公式 OCR 是可选功能；它的 Python 环境和模型权重不包含在软件、代码仓库或
 发布包中。
 
-## 从源码快速安装
+## 旧版 Windows 源码安装
 
 1. 安装 Node.js，然后重新打开一个 **新的** PowerShell 窗口。
 2. 全局安装兼容版本：
@@ -114,7 +127,7 @@ Node.js 和 `excalidraw-edit` 属于外部前置依赖，不会打包进 EXE 或
 
 `install.ps1` 会将该目录加入当前用户的 `PATH`，不需要管理员权限。
 
-## 安装预编译包
+## 旧版 Windows 预编译包
 
 如果下载的发布包已经包含下列经过测试的文件和目录，可以跳过本地编译：
 
@@ -140,7 +153,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -SkipBuild
 如果要便携运行，请完整保留 `dist` 目录并启动
 `dist\ExcalidrawManager.exe`；`runtime` 文件夹必须与 EXE 放在一起。
 
-## 使用方法
+## 旧版 Windows 使用方法
 
 在图形界面中添加一个或多个工作区。双击画板或使用工具栏启动，然后在默认浏览器
 中打开它的本地 URL。点击 **Environment** 可以查看软件实际找到的 Node.js、
@@ -159,7 +172,7 @@ excalidraw-manager --version
 请谨慎使用 `stop-all`：它也会停止不是由本软件启动、但能被识别的
 `excalidraw-edit` 进程。
 
-## 本地公式编辑器（0.4.0）
+## 本地公式编辑器（0.5.0）
 
 点击管理器工具栏或系统托盘菜单中的 **公式编辑器**。管理器会启动一个仅绑定
 `127.0.0.1` 的服务，并在默认浏览器中打开编辑器。页面默认进入源码模式且焦点
@@ -192,17 +205,28 @@ Excalidraw，插入后面板不会隐藏。如果无法直接插入，面板会�
 悬浮面板。识别会在后台运行，并把第一个 LaTeX 候选结果填回输入框供校对。
 当画板、悬浮面板或独立公式窗口拥有焦点时，按 `Ctrl+Alt+O`（也可点击
 **截屏 OCR**）可以在任意屏幕区域拖动框选并立即识别；该快捷键不会抢占其他
-应用的 Windows 全局快捷键。
-原生选区工具只在内存中抓取和传递 PNG，不会在 Windows“屏幕截图”目录或其他
-位置生成截图文件。完整编辑器的**图片识别**页也支持选择、拖入或粘贴图片，
-并查看多个候选结果。未安装 OCR 时，编辑、渲染和导出仍完全可用。
+应用的系统全局快捷键。Windows 原生选区工具只在内存中抓取和传递 PNG；macOS
+使用苹果系统框选器，截图仅短暂停留在权限收紧的临时目录，传给本地公式服务后
+立即删除。两边都不会写入用户的“屏幕截图”目录。macOS 第一次使用时可能要求在
+**系统设置 → 隐私与安全性 → 屏幕录制**中授权。完整编辑器的**图片识别**页也
+支持选择、拖入或粘贴图片，并查看多个候选结果。未安装 OCR 时，编辑、渲染和
+导出仍完全可用。
 
 ### 可选的本地 RapidLaTeXOCR provider
 
-0.4.0 包含 provider 适配层和显式安装脚本，但**不捆绑 Python 环境或模型权重**，
-启动管理器也不会自动下载它们。如需在 D 盘安装可选的、仅使用 CPU 的
-RapidLaTeXOCR 0.0.9，请先在 D 盘安装 64 位 Python 3.10-3.12，阅读上游模型条款，
-确认系统已有 Microsoft Visual C++ 2019 或更高版本 x64 运行库，再显式运行：
+0.5.0 包含 provider 适配层和显式安装脚本，但**不捆绑 Python 环境或模型权重**，
+启动管理器也不会自动下载它们。macOS/Linux 使用：
+
+```bash
+./scripts/install-formula-ocr.sh \
+  --install-root "$HOME/Library/Application Support/Excalidraw Manager/FormulaOCR" \
+  --python "$(command -v python3)" \
+  --accept-upstream-model-license
+```
+
+Windows 可在 D 盘安装可选的、仅使用 CPU 的 RapidLaTeXOCR 0.0.9。请先安装
+64 位 Python 3.10-3.12，确认系统已有 Microsoft Visual C++ 2019 或更高版本
+x64 运行库，并在阅读上游模型条款后显式运行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-formula-ocr.ps1 `
@@ -211,7 +235,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-formula-oc
   -AcceptUpstreamModelLicense
 ```
 
-请把 Python 路径改为实际位置。脚本会创建隔离环境，并把 pip、临时文件、
+请把安装目录和 Python 路径改为实际位置。两个脚本都会创建隔离环境，并把 pip、临时文件、
 Hugging Face 和 Torch 缓存全部放在所选根目录下；默认拒绝安装到 Windows 系统盘。
 预计需要下载约 **260-290 MB**，安装后约占用 **450-650 MB** 磁盘空间。
 脚本不会替你安装 Microsoft Visual C++ 运行库；如果缺少该前置组件，应先检查
@@ -309,6 +333,7 @@ runtime/formula-overlay.mjs     受管理画板的悬浮公式面板
 runtime/formula-ocr-provider/   仅回环地址运行的可选 OCR provider 适配层
 runtime/formula-editor/         公式编辑器界面及捆绑的数学渲染资源
 scripts/install-formula-ocr.ps1 需用户显式运行的可选 OCR 安装脚本
+scripts/install-formula-ocr.sh  macOS/Linux 可选 OCR 安装脚本
 src/                            WinForms 图形界面和命令行启动器
 src/FormulaCapture.cs           截屏 OCR 使用的纯内存 Windows 区域选择器
 tests/                          PowerShell 集成测试

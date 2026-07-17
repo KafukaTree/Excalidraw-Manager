@@ -1,0 +1,25 @@
+[package]
+name = "excalidraw-manager"
+version = "0.5.0"
+description = "Cross-platform desktop manager for local Excalidraw boards"
+authors = ["KafukaTree"]
+edition = "2021"
+
+[lib]
+name = "excalidraw_manager_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+url = "2"
+which = "8"
+uuid = { version = "1", features = ["v4"] }

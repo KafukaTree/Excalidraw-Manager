@@ -1,0 +1,146 @@
+#!/bin/bash
+
+# macOS screen-region picker for the formula OCR runtime. The selected image is
+# kept in a private temporary directory, streamed as JSON, and removed on exit.
+
+set -u
+umask 077
+
+readonly MAXIMUM_SELECTION_PIXELS=40000000
+readonly MAXIMUM_PNG_BYTES=12582912
+
+parent_pid=""
+capture_pid=""
+watcher_pid=""
+capture_directory=""
+
+describe() {
+  printf '%s\n' '{"name":"Excalidraw Manager macOS Capture","version":1,"mimeType":"image/png","inMemory":false,"maximumDesktopPixels":64000000,"maximumSelectionPixels":40000000,"maximumPngBytes":12582912}'
+}
+
+error_payload() {
+  printf '{"cancelled":false,"error":"%s"}\n' "$1"
+}
+
+cleanup() {
+  if [[ -n "$capture_pid" ]]; then
+    /bin/kill "$capture_pid" 2>/dev/null || true
+    wait "$capture_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$watcher_pid" ]]; then
+    /bin/kill "$watcher_pid" 2>/dev/null || true
+    wait "$watcher_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$capture_directory" && -d "$capture_directory" ]]; then
+    /bin/rm -rf -- "$capture_directory"
+  fi
+}
+
+trap cleanup EXIT
+trap 'exit 143' HUP INT TERM
+
+if [[ $# -eq 1 && "$1" == "--describe" ]]; then
+  describe
+  exit 0
+fi
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --parent-pid)
+      if [[ $# -lt 2 || ! "$2" =~ ^[0-9]+$ ]]; then
+        error_payload "CAPTURE_INVALID_ARGUMENT"
+        exit 2
+      fi
+      parent_pid="$2"
+      shift 2
+      ;;
+    --lang)
+      if [[ $# -lt 2 ]]; then
+        error_payload "CAPTURE_INVALID_ARGUMENT"
+        exit 2
+      fi
+      shift 2
+      ;;
+    *)
+      error_payload "CAPTURE_INVALID_ARGUMENT"
+      exit 2
+      ;;
+  esac
+done
+
+if [[ "$(/usr/bin/uname -s)" != "Darwin" || ! -x /usr/sbin/screencapture ]]; then
+  error_payload "CAPTURE_UNAVAILABLE"
+  exit 2
+fi
+
+if [[ -n "$parent_pid" ]] && ! /bin/kill -0 "$parent_pid" 2>/dev/null; then
+  error_payload "CAPTURE_PARENT_EXITED"
+  exit 2
+fi
+
+capture_directory="$(/usr/bin/mktemp -d "/tmp/excalidraw-formula-capture.XXXXXX")" || {
+  error_payload "CAPTURE_UNAVAILABLE"
+  exit 2
+}
+readonly capture_file="$capture_directory/selection.png"
+readonly capture_errors="$capture_directory/capture.stderr"
+
+if [[ -n "$parent_pid" ]]; then
+  helper_pid=$$
+  (
+    while /bin/kill -0 "$parent_pid" 2>/dev/null; do
+      /bin/sleep 1
+    done
+    /bin/kill -TERM "$helper_pid" 2>/dev/null || true
+  ) &
+  watcher_pid=$!
+fi
+
+# -i enables Apple's interactive picker, -s limits it to a rectangular region,
+# -x suppresses the shutter sound, and -d lets macOS display permission errors.
+/usr/sbin/screencapture -i -s -x -d -t png "$capture_file" 2>"$capture_errors" &
+capture_pid=$!
+if wait "$capture_pid"; then
+  capture_status=0
+else
+  capture_status=$?
+fi
+capture_pid=""
+
+if [[ ! -s "$capture_file" ]]; then
+  # Escape and right-click both leave no output file. macOS itself presents any
+  # Screen Recording permission prompt or error before this point.
+  printf '%s\n' '{"cancelled":true}'
+  exit 0
+fi
+
+png_bytes="$(/usr/bin/stat -f '%z' "$capture_file" 2>/dev/null || printf '0')"
+if [[ ! "$png_bytes" =~ ^[0-9]+$ || "$png_bytes" -lt 24 ]]; then
+  error_payload "CAPTURE_OUTPUT_INVALID"
+  exit 2
+fi
+if [[ "$png_bytes" -gt "$MAXIMUM_PNG_BYTES" ]]; then
+  error_payload "CAPTURE_OUTPUT_TOO_LARGE"
+  exit 2
+fi
+
+dimensions="$(/usr/bin/sips -g pixelWidth -g pixelHeight "$capture_file" 2>/dev/null)"
+width="$(printf '%s\n' "$dimensions" | /usr/bin/awk '/pixelWidth:/ { print $2; exit }')"
+height="$(printf '%s\n' "$dimensions" | /usr/bin/awk '/pixelHeight:/ { print $2; exit }')"
+if [[ ! "$width" =~ ^[0-9]+$ || ! "$height" =~ ^[0-9]+$ || "$width" -lt 2 || "$height" -lt 2 ]]; then
+  error_payload "CAPTURE_OUTPUT_INVALID"
+  exit 2
+fi
+if (( width * height > MAXIMUM_SELECTION_PIXELS )); then
+  error_payload "CAPTURE_SELECTION_TOO_LARGE"
+  exit 2
+fi
+
+if [[ "$capture_status" -ne 0 ]]; then
+  error_payload "CAPTURE_FAILED"
+  exit 2
+fi
+
+printf '{"cancelled":false,"mimeType":"image/png","width":%s,"height":%s,"image":"' "$width" "$height"
+/usr/bin/base64 < "$capture_file" | /usr/bin/tr -d '\r\n'
+printf '%s\n' '"}'

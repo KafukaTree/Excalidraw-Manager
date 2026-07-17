@@ -1,11 +1,41 @@
 {
-  "name": "excalidraw-manager-formula-editor-assets",
-  "version": "0.4.0",
+  "name": "excalidraw-manager",
+  "version": "0.5.0",
   "private": true,
-  "description": "Pinned browser assets used by the local Excalidraw Manager formula editor.",
+  "type": "module",
+  "description": "Cross-platform desktop manager for local Excalidraw boards.",
   "license": "MIT",
+  "scripts": {
+    "dev": "npm run prepare:runtime && vite",
+    "build": "npm run prepare:runtime && tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "prepare:runtime": "node runtime/patch-client.mjs node_modules/excalidraw-edit/src/public/assets/main.js runtime/main.js",
+    "pretest:runtime": "npm run prepare:runtime",
+    "test:runtime": "node tests/formula-completion-trigger.mjs && node tests/formula-template-insertion.mjs && node tests/provider-registry.mjs && node tests/formula-ocr-provider.mjs && node tests/formula-capture-helper.mjs && node tests/runtime-services.mjs",
+    "check:runtime": "node --check runtime/server.mjs && node --check runtime/formula-server.mjs && node --check runtime/formula-overlay.mjs && node --check runtime/formula-provider-registry.mjs"
+  },
   "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.6.0",
+    "@tauri-apps/plugin-global-shortcut": "^2.3.1",
+    "@tauri-apps/plugin-opener": "^2.5.3",
+    "excalidraw-edit": "0.1.1",
+    "lucide-react": "^1.24.0",
     "mathjax": "4.1.3",
-    "mathlive": "0.110.0"
+    "mathlive": "0.110.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.2"
   }
 }

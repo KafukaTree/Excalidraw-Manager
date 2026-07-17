@@ -12,6 +12,9 @@ TestResults/
 *.zip
 .tmp/
 node_modules/
+desktop-dist/
+runtime/main.js
+src-tauri/target/
 
 # Optional local OCR environments and model weights
 .venv/

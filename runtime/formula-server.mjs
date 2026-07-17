@@ -4,7 +4,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
 import { FormulaProviderRegistry, ProviderRegistryError } from './formula-provider-registry.mjs';
 
-const APP_VERSION = '0.4.0';
+const APP_VERSION = '0.5.0';
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
   const index = args.indexOf(name);
