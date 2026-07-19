@@ -38,7 +38,7 @@
     <section class="card input-card" aria-labelledby="input-title">
       <div class="card-heading">
         <div>
-          <h2 id="input-title"><span aria-hidden="true">✎</span> <span data-i18n="inputTitle">输入区域</span></h2>
+          <h2 id="input-title" data-i18n="inputTitle">输入区域</h2>
           <p data-i18n="inputHint">直接键入 LaTeX，或用可视化编辑器快速构建公式。</p>
         </div>
         <button id="keyboard-button" class="secondary-button" type="button">
@@ -180,7 +180,7 @@
     <section class="card output-card" aria-labelledby="output-title">
       <div class="card-heading output-heading">
         <div>
-          <h2 id="output-title"><span aria-hidden="true">↓</span> <span data-i18n="outputTitle">输出区域</span></h2>
+          <h2 id="output-title" data-i18n="outputTitle">输出区域</h2>
           <p id="render-status" role="status" data-i18n="ready">准备就绪</p>
         </div>
         <div class="zoom-control" role="group" aria-label="Preview zoom">
@@ -225,7 +225,18 @@
         </div>
         <div class="export-actions">
           <button id="capture-ocr" class="secondary-button" type="button" title="Ctrl + Alt + O"><span aria-hidden="true">▣</span> <span data-i18n="captureOcr">截屏 OCR</span></button>
-          <button id="copy-svg" class="primary-button" type="button" title="Ctrl + Enter"><span aria-hidden="true">◇</span> <span data-i18n="copySvg">复制 SVG</span></button>
+          <div class="split-copy">
+            <button id="copy-main" class="primary-button" type="button" title="Ctrl + Enter"><span aria-hidden="true">◇</span> <span id="copy-main-label">复制 SVG</span></button>
+            <button id="copy-menu-button" class="primary-button split-toggle copy-toggle" type="button" aria-haspopup="menu" aria-controls="copy-menu" aria-expanded="false" data-i18n-aria-label="copyMenu" aria-label="选择复制格式">▾</button>
+            <div id="copy-menu" class="download-menu copy-menu hidden" role="menu" data-i18n-aria-label="copyMenu" aria-label="选择复制格式">
+              <button type="button" role="menuitemradio" aria-checked="true" data-copy-format="svg" data-i18n="formatSvg">SVG</button>
+              <button type="button" role="menuitemradio" aria-checked="false" data-copy-format="png" data-i18n="formatPng">PNG</button>
+              <button type="button" role="menuitemradio" aria-checked="false" data-copy-format="latex" data-i18n="formatLatex">LaTeX</button>
+              <button type="button" role="menuitemradio" aria-checked="false" data-copy-format="markdown-inline" data-i18n="formatMarkdownInline">Markdown 行内</button>
+              <button type="button" role="menuitemradio" aria-checked="false" data-copy-format="markdown-block" data-i18n="formatMarkdownBlock">Markdown 块</button>
+              <button type="button" role="menuitemradio" aria-checked="false" data-copy-format="mathml" data-i18n="formatMathml">MathML</button>
+            </div>
+          </div>
           <div class="split-export">
             <button id="download-main" class="secondary-button" type="button"><span data-i18n="downloadSvg">下载 SVG</span></button>
             <button id="download-menu-button" class="secondary-button split-toggle" type="button" aria-haspopup="menu" aria-expanded="false">▾</button>
