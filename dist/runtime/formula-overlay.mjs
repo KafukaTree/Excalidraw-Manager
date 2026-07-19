@@ -132,13 +132,13 @@ export function startFormulaOverlay(rawUrl) {
 
   const zh = (navigator.language || '').toLowerCase().startsWith('zh');
   const labels = zh ? {
-    title: '公式悬浮窗', open: '公式', close: '收起', full: '完整编辑器', popout: '独立窗口',
-    hint: 'Ctrl+Enter 插入 · Ctrl+Alt+O 截图 OCR', inserted: 'SVG 已发送到画板',
-    fallback: 'SVG 已复制，请在画板按 Ctrl+V', invalid: '拒绝了无效的 SVG', popupBlocked: '浏览器阻止了独立窗口',
+    title: '公式悬浮窗', open: '公式', close: '收起', full: '完整编辑器',
+    hint: 'Ctrl+Enter 复制所选格式 · Ctrl+Alt+O 截图 OCR', inserted: 'SVG 已发送到画板',
+    fallback: 'SVG 已复制，请在画板按 Ctrl+V', invalid: '拒绝了无效的 SVG',
   } : {
-    title: 'Formula palette', open: 'Formula', close: 'Collapse', full: 'Full editor', popout: 'Pop out',
-    hint: 'Ctrl+Enter inserts · Ctrl+Alt+O captures OCR', inserted: 'SVG sent to the board',
-    fallback: 'SVG copied; press Ctrl+V on the board', invalid: 'Invalid SVG was rejected', popupBlocked: 'The popup was blocked',
+    title: 'Formula palette', open: 'Formula', close: 'Collapse', full: 'Full editor',
+    hint: 'Ctrl+Enter copies the selected format · Ctrl+Alt+O captures OCR', inserted: 'SVG sent to the board',
+    fallback: 'SVG copied; press Ctrl+V on the board', invalid: 'Invalid SVG was rejected',
   };
 
   const root = document.createElement('div');
@@ -148,27 +148,27 @@ export function startFormulaOverlay(rawUrl) {
     <style>
       :host { all: initial; }
       * { box-sizing: border-box; }
-      #launcher { position: fixed; right: 14px; bottom: 82px; z-index: 2147483600; border: 1px solid #c8c9d0;
-        border-radius: 10px; padding: 9px 13px; color: #1b1b1f; background: #fff; box-shadow: 0 4px 16px #0002;
-        font: 600 13px/1.2 system-ui, sans-serif; cursor: pointer; }
-      #launcher:hover { border-color: #6965db; color: #514dc6; }
+      #launcher { position: fixed; right: 14px; bottom: 82px; z-index: 2147483600; border: 1px solid #dde1e8;
+        border-radius: 10px; padding: 9px 14px; color: #1c1f2a; background: #fff; box-shadow: 0 2px 6px #1018280f, 0 8px 22px #10182814;
+        font: 600 13px/1.2 system-ui, sans-serif; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+      #launcher:hover { border-color: #343a46; color: #343a46; background: #f0f1f3; }
       #panel { position: fixed; z-index: 2147483601;
         container-type: inline-size;
         min-width: min(${MIN_PANEL_WIDTH}px, calc(100vw - ${PANEL_MARGIN * 2}px));
         min-height: min(${MIN_PANEL_HEIGHT}px, calc(100vh - ${PANEL_MARGIN * 2}px));
-        width: 520px; height: 520px; border: 1px solid #b8b9c2; border-radius: 12px; overflow: hidden; background: #fff;
-        box-shadow: 0 14px 44px #0004; font: 13px/1.3 system-ui, sans-serif; }
+        width: 520px; height: 520px; border: 1px solid #dde1e8; border-radius: 13px; overflow: hidden; background: #fff;
+        box-shadow: 0 4px 10px #1018280d, 0 18px 48px #1018281f; font: 13px/1.3 system-ui, sans-serif; }
       #panel[hidden] { display: none; }
-      header { height: 42px; display: flex; align-items: center; gap: 7px; padding: 0 7px 0 10px; color: #24242b;
-        background: #f7f7fa; border-bottom: 1px solid #dedee5; user-select: none; cursor: move; }
-      header strong { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-      header .header-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #6d6d78; font-size: 11px; white-space: nowrap; }
-      header button, header a { border: 0; border-radius: 7px; padding: 6px 8px; color: #53505e; background: transparent;
+      header { height: 44px; display: flex; align-items: center; gap: 6px; padding: 0 7px 0 12px; color: #1c1f2a;
+        background: #fafbfc; border-bottom: 1px solid #e7eaef; user-select: none; cursor: move; }
+      header strong { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 650; }
+      header .header-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #69707f; font-size: 11px; white-space: nowrap; }
+      header button, header a { border: 0; border-radius: 7px; padding: 6px 8px; color: #55606e; background: transparent;
         flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
         font: 12px/1 system-ui, sans-serif; cursor: pointer; }
       .header-action-icon { display: none; font-size: 15px; }
-      header button:hover, header a:hover { color: #514dc6; background: #e9e8ff; }
-      iframe { display: block; width: 100%; height: calc(100% - 42px); border: 0; background: #fff; }
+      header button:hover, header a:hover { color: #343a46; background: #f0f1f3; }
+      iframe { display: block; width: 100%; height: calc(100% - 44px); border: 0; background: #fff; }
       .resize-handle { position: absolute; z-index: 5; display: block; touch-action: none; user-select: none; }
       .resize-handle[data-edge="n"] { top: 0; left: 12px; right: 12px; height: 8px; cursor: ns-resize; }
       .resize-handle[data-edge="s"] { bottom: 0; left: 12px; right: 12px; height: 8px; cursor: ns-resize; }
@@ -179,8 +179,8 @@ export function startFormulaOverlay(rawUrl) {
       .resize-handle[data-edge="se"] { right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; }
       .resize-handle[data-edge="sw"] { left: 0; bottom: 0; width: 14px; height: 14px; cursor: nesw-resize; }
       #toast { position: fixed; left: 50%; bottom: 28px; z-index: 2147483602; transform: translateX(-50%) translateY(12px);
-        max-width: min(480px, calc(100vw - 32px)); padding: 9px 13px; border-radius: 9px; color: #fff; background: #27272e;
-        box-shadow: 0 8px 24px #0004; opacity: 0; pointer-events: none; transition: .16s ease;
+        max-width: min(480px, calc(100vw - 32px)); padding: 9px 14px; border-radius: 10px; color: #fff; background: #20242e;
+        box-shadow: 0 10px 30px #0000003d; opacity: 0; pointer-events: none; transition: .16s ease;
         font: 13px/1.3 system-ui, sans-serif; }
       #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
       @container (max-width: 440px) {
@@ -190,16 +190,17 @@ export function startFormulaOverlay(rawUrl) {
         header button, header a { width: 30px; height: 30px; padding: 0; }
       }
       @media (prefers-color-scheme: dark) {
-        #launcher, #panel { color: #eeeef3; background: #232329; border-color: #555560; }
-        header { color: #eeeef3; background: #2d2d35; border-color: #494952; }
-        header .header-hint { color: #b8b8c2; } header button, header a { color: #d5d5dc; }
+        #launcher, #panel { color: #e8eaf0; background: #15181d; border-color: #38404b; }
+        #launcher:hover { color: #d6dae1; background: #2b3038; border-color: #59616c; }
+        header { color: #e8eaf0; background: #1b1f26; border-color: #262b33; }
+        header .header-hint { color: #99a1af; } header button, header a { color: #c6cdd8; }
+        header button:hover, header a:hover { color: #d6dae1; background: #2b3038; }
       }
     </style>
     <button id="launcher" type="button" title="Ctrl+Alt+F">ƒx&nbsp; ${labels.open}</button>
     <section id="panel" role="dialog" aria-label="${labels.title}" hidden>
       <header id="drag-handle">
         <strong>${labels.title}</strong><span class="header-hint">${labels.hint}</span>
-        <button id="popout" type="button" aria-label="${labels.popout}" title="${labels.popout}"><span class="header-action-icon" aria-hidden="true">↗</span><span class="header-action-label">${labels.popout}</span></button>
         <a id="full" target="_blank" rel="noopener" aria-label="${labels.full}" title="${labels.full}"><span class="header-action-icon" aria-hidden="true">□</span><span class="header-action-label">${labels.full}</span></a>
         <button id="close" type="button" aria-label="${labels.close}">✕</button>
       </header>
@@ -213,7 +214,6 @@ export function startFormulaOverlay(rawUrl) {
   const panel = shadow.getElementById('panel');
   const frame = shadow.getElementById('frame');
   const full = shadow.getElementById('full');
-  const popout = shadow.getElementById('popout');
   const close = shadow.getElementById('close');
   const handle = shadow.getElementById('drag-handle');
   const toast = shadow.getElementById('toast');
@@ -222,7 +222,6 @@ export function startFormulaOverlay(rawUrl) {
   let loaded = false;
   let frameReady = false;
   let pendingCapture = false;
-  let popupWindow = null;
 
   const fullUrl = new URL(formulaUrl);
   fullUrl.searchParams.delete('compact');
@@ -268,46 +267,6 @@ export function startFormulaOverlay(rawUrl) {
   launcher.addEventListener('click', () => setOpen(true));
   close.addEventListener('click', () => setOpen(false));
   addEventListener('resize', () => { if (!panel.hidden) clampPanel(panel); });
-
-  popout.addEventListener('click', () => {
-    if (popupWindow && !popupWindow.closed) {
-      popupWindow.focus();
-      return;
-    }
-    const width = Math.max(300, Math.min(720, Math.round(panel.getBoundingClientRect().width)));
-    const height = Math.max(420, Math.min(820, Math.round(panel.getBoundingClientRect().height)));
-    const nextPopup = window.open('', '_blank', `popup=yes,width=${width},height=${height},resizable=yes,scrollbars=no`);
-    if (!nextPopup) {
-      showToast(labels.popupBlocked);
-      return;
-    }
-    popupWindow = nextPopup;
-    const popupDocument = nextPopup.document;
-    popupDocument.documentElement.lang = zh ? 'zh-CN' : 'en';
-    popupDocument.title = labels.title;
-    const meta = popupDocument.createElement('meta');
-    meta.name = 'viewport';
-    meta.content = 'width=device-width,initial-scale=1';
-    const style = popupDocument.createElement('style');
-    style.textContent = 'html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#fff}iframe{display:block;width:100%;height:100%;border:0;background:#fff}';
-    popupDocument.head.replaceChildren(meta, style);
-    const popupFrame = popupDocument.createElement('iframe');
-    popupFrame.title = labels.title;
-    popupFrame.allow = 'clipboard-read; clipboard-write';
-    popupFrame.sandbox = 'allow-scripts allow-same-origin allow-downloads';
-    popupFrame.src = formulaUrl.href;
-    popupDocument.body.replaceChildren(popupFrame);
-    nextPopup.addEventListener('message', (event) => {
-      if (event.origin !== formulaUrl.origin || event.source !== popupFrame.contentWindow
-        || event.data?.type !== 'excalidraw-manager:insert-svg') return;
-      handleSvgInsert(event.data, nextPopup);
-    });
-    nextPopup.opener = null;
-    nextPopup.addEventListener('pagehide', () => {
-      if (popupWindow === nextPopup) popupWindow = null;
-    }, { once: true });
-    nextPopup.focus();
-  });
 
   let drag = null;
   handle.addEventListener('pointerdown', (event) => {

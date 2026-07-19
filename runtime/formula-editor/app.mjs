@@ -4,7 +4,7 @@ import { latexCommands, mathfieldInsertion, quickGroups } from '/templates.mjs';
 
 const translations = {
   'zh-CN': {
-    appTitle: '本地公式编辑器', appSubtitle: 'LaTeX 编辑、实时预览与离线导出', offlineBadge: '完全本地', language: '语言',
+    appTitle: '本地公式编辑器', paletteTitle: '公式悬浮窗', appSubtitle: 'LaTeX 编辑、实时预览与离线导出', offlineBadge: '完全本地', language: '语言',
     inputTitle: '输入区域', inputHint: '直接键入 LaTeX，或用可视化编辑器快速构建公式。', keyboard: '数学键盘',
     quickTools: '快捷工具', quickPalette: '常用公式与符号', closeQuickPalette: '关闭符号面板', imageRecognition: '图片识别', documentRecognition: '文档识别',
     modelNotInstalled: '尚未安装公式识别模型', modelOptional: '模型是可选组件。键盘编辑、渲染和所有导出功能已经可以离线使用。',
@@ -13,22 +13,24 @@ const translations = {
     documentOptional: '后续可接入页面分割、公式定位和批量识别模型，而不改变编辑器。', importPages: '导入页面', detectFormulas: '定位公式',
     replaceableModel: '可替换模型', reviewExport: '校对与导出', color: '颜色', font: '字体', defaultFont: '默认字体', environment: '环境',
     clear: '清空', sourceMode: '源码', visualMode: '可视化', latexSource: 'LaTeX 源码',
-    sourceHelp: 'Ctrl + Enter 渲染并复制 SVG · 输入 \\ 查看命令', visualEditor: '可视化公式', visualHelp: '点击公式后，可使用方向键、Tab 和数学键盘编辑。',
+    sourceHelp: 'Ctrl + Enter 复制所选格式 · 输入 \\ 查看命令', visualEditor: '可视化公式', visualHelp: '点击公式后，可使用方向键、Tab 和数学键盘编辑。',
     outputTitle: '输出区域', ready: '准备就绪', previewHint: '输入公式后将在这里实时渲染', scale: '倍率', background: '背景',
-    transparent: '透明', white: '白色', dark: '深色', fileName: '文件名', copySvg: '复制 SVG', downloadSvg: '下载 SVG',
+    transparent: '透明', white: '白色', dark: '深色', fileName: '文件名', copySvg: '复制 SVG', copyPng: '复制 PNG', copyLatex: '复制 LaTeX',
+    copyMarkdownInline: '复制 Markdown 行内', copyMarkdownBlock: '复制 Markdown 块', copyMathml: '复制 MathML', copyMenu: '选择复制格式',
+    formatSvg: 'SVG', formatPng: 'PNG', formatLatex: 'LaTeX', formatMarkdownInline: 'Markdown 行内', formatMarkdownBlock: 'Markdown 块', formatMathml: 'MathML', downloadSvg: '下载 SVG',
     copyOpenBoard: '复制并打开画板', copyCode: '复制代码', localPrivacy: '公式和图片不会离开这台电脑',
-    rendering: '正在渲染…', rendered: '已在本机渲染', emptyFormula: '请先输入公式', copied: '已复制到剪贴板', copiedSvg: 'SVG 已复制到剪贴板', svgSent: 'SVG 已发送到画板',
+    rendering: '正在渲染…', rendered: '已在本机渲染', emptyFormula: '请先输入公式', copied: '已复制到剪贴板', copiedSvg: 'SVG 已复制到剪贴板', copiedPng: 'PNG 已复制到剪贴板', svgSent: 'SVG 已发送到画板',
     downloaded: '文件已保存', renderFailed: '渲染失败', copyFailed: '剪贴板写入失败', imageReady: '图片已就绪，安装模型后即可识别',
     invalidImage: '请选择受支持的图片文件', confirmClear: '要清空当前公式吗？草稿也会被清除。', draftRestored: '已恢复上次的本地草稿',
     boardOpened: 'SVG 已复制，正在打开画板', modelUnavailable: '当前没有安装识别模型', themeSystem: '跟随系统', themeLight: '浅色', themeDark: '深色',
-    outputUnavailable: '当前公式无法转换为这种格式', rasterTooLarge: '导出尺寸过大，请降低倍率', mathEngineFailed: '本地数学渲染器加载失败',
+    outputUnavailable: '当前公式无法转换为这种格式', rasterTooLarge: '导出尺寸过大，请降低倍率', imageClipboardUnavailable: '当前浏览器不支持复制 PNG 图片', mathEngineFailed: '本地数学渲染器加载失败',
     modelProvider: '识别模型', recognizeFormula: '识别公式', modelReady: '发现 {0} 个可用的本地识别 Provider', recognizing: '正在本机识别…',
     recognized: '识别完成，请选择候选结果', recognizedApplied: '识别完成，已填入公式', candidates: '候选结果', confidence: '置信度', imageTooLarge: '图片不能超过 12 MiB', recognitionFailed: '公式识别失败',
     captureOcr: '截屏 OCR', captureSelecting: '请拖动选择公式区域；Esc 或右键取消', captureCancelled: '已取消截图',
     captureBusy: '已有一个截图选区正在进行', captureTimeout: '截图选择超时', captureUnavailable: '本机截图组件不可用', captureFailed: '截图失败',
   },
   en: {
-    appTitle: 'Local Formula Editor', appSubtitle: 'LaTeX editing, live preview and offline export', offlineBadge: 'Fully local', language: 'Language',
+    appTitle: 'Local Formula Editor', paletteTitle: 'Formula palette', appSubtitle: 'LaTeX editing, live preview and offline export', offlineBadge: 'Fully local', language: 'Language',
     inputTitle: 'Input', inputHint: 'Type LaTeX directly, or build a formula with the visual editor.', keyboard: 'Math keyboard',
     quickTools: 'Quick tools', quickPalette: 'Common formulas and symbols', closeQuickPalette: 'Close symbol palette', imageRecognition: 'Image recognition', documentRecognition: 'Document recognition',
     modelNotInstalled: 'No formula recognition model installed', modelOptional: 'The model is optional. Keyboard editing, rendering and every export already work offline.',
@@ -37,15 +39,17 @@ const translations = {
     documentOptional: 'Page segmentation, formula detection and batch recognition can be added later without changing the editor.', importPages: 'Import pages', detectFormulas: 'Detect formulas',
     replaceableModel: 'Replaceable model', reviewExport: 'Review and export', color: 'Color', font: 'Font', defaultFont: 'Default font', environment: 'Environment',
     clear: 'Clear', sourceMode: 'Source', visualMode: 'Visual', latexSource: 'LaTeX source',
-    sourceHelp: 'Ctrl + Enter renders and copies SVG · Type \\ for commands', visualEditor: 'Visual formula', visualHelp: 'Use arrow keys, Tab and the math keyboard after selecting the formula.',
+    sourceHelp: 'Ctrl + Enter copies the selected format · Type \\ for commands', visualEditor: 'Visual formula', visualHelp: 'Use arrow keys, Tab and the math keyboard after selecting the formula.',
     outputTitle: 'Output', ready: 'Ready', previewHint: 'Your formula will render here as you type', scale: 'Scale', background: 'Background',
-    transparent: 'Transparent', white: 'White', dark: 'Dark', fileName: 'File name', copySvg: 'Copy SVG', downloadSvg: 'Download SVG',
+    transparent: 'Transparent', white: 'White', dark: 'Dark', fileName: 'File name', copySvg: 'Copy SVG', copyPng: 'Copy PNG', copyLatex: 'Copy LaTeX',
+    copyMarkdownInline: 'Copy inline Markdown', copyMarkdownBlock: 'Copy block Markdown', copyMathml: 'Copy MathML', copyMenu: 'Choose copy format',
+    formatSvg: 'SVG', formatPng: 'PNG', formatLatex: 'LaTeX', formatMarkdownInline: 'Inline Markdown', formatMarkdownBlock: 'Block Markdown', formatMathml: 'MathML', downloadSvg: 'Download SVG',
     copyOpenBoard: 'Copy and open board', copyCode: 'Copy code', localPrivacy: 'Formulas and images never leave this computer',
-    rendering: 'Rendering…', rendered: 'Rendered locally', emptyFormula: 'Enter a formula first', copied: 'Copied to clipboard', copiedSvg: 'SVG copied to clipboard', svgSent: 'SVG sent to the board',
+    rendering: 'Rendering…', rendered: 'Rendered locally', emptyFormula: 'Enter a formula first', copied: 'Copied to clipboard', copiedSvg: 'SVG copied to clipboard', copiedPng: 'PNG copied to clipboard', svgSent: 'SVG sent to the board',
     downloaded: 'File saved', renderFailed: 'Rendering failed', copyFailed: 'Could not write to the clipboard', imageReady: 'Image is ready; install a model to recognize it',
     invalidImage: 'Choose a supported image file', confirmClear: 'Clear this formula and its saved draft?', draftRestored: 'Restored your local draft',
     boardOpened: 'SVG copied; opening the board', modelUnavailable: 'No recognition model is installed', themeSystem: 'System theme', themeLight: 'Light theme', themeDark: 'Dark theme',
-    outputUnavailable: 'This formula cannot be converted to that format', rasterTooLarge: 'Export is too large; choose a lower scale', mathEngineFailed: 'The local math renderer could not load',
+    outputUnavailable: 'This formula cannot be converted to that format', rasterTooLarge: 'Export is too large; choose a lower scale', imageClipboardUnavailable: 'This browser cannot copy PNG images', mathEngineFailed: 'The local math renderer could not load',
     modelProvider: 'Recognition model', recognizeFormula: 'Recognize formula', modelReady: '{0} local recognition provider(s) available', recognizing: 'Recognizing locally…',
     recognized: 'Recognition complete; choose a candidate', recognizedApplied: 'Recognition complete; formula inserted', candidates: 'Candidates', confidence: 'Confidence', imageTooLarge: 'Images must be 12 MiB or smaller', recognitionFailed: 'Formula recognition failed',
     captureOcr: 'Capture OCR', captureSelecting: 'Drag around a formula; press Esc or right-click to cancel', captureCancelled: 'Screen capture cancelled',
@@ -67,11 +71,14 @@ const backgroundSelect = $('#background-select');
 const params = new URLSearchParams(location.search);
 const compactMode = params.get('compact') === '1' || params.get('embed') === '1';
 const supportedImageTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const copyFormats = new Set(['svg', 'png', 'latex', 'markdown-inline', 'markdown-block', 'mathml']);
+const storedCopyFormat = localStorage.getItem('formula-editor.copy-format');
 
 const state = {
   language: params.get('lang')?.toLowerCase().startsWith('zh') ? 'zh-CN' : (params.get('lang') === 'en' ? 'en' : (navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')),
   themeChoice: localStorage.getItem('formula-editor.theme') || 'system',
   activeFormat: 'svg',
+  copyFormat: copyFormats.has(storedCopyFormat) ? storedCopyFormat : 'svg',
   activePanel: 'quick',
   editMode: 'source',
   zoom: Number(localStorage.getItem('formula-editor.zoom')) || 100,
@@ -262,9 +269,47 @@ function t(key) {
   return translations[state.language][key] || translations.en[key] || key;
 }
 
+function copyFormatTranslationKey(format) {
+  return {
+    svg: 'copySvg',
+    png: 'copyPng',
+    latex: 'copyLatex',
+    'markdown-inline': 'copyMarkdownInline',
+    'markdown-block': 'copyMarkdownBlock',
+    mathml: 'copyMathml',
+  }[format] || 'copySvg';
+}
+
+function updateCopyAction() {
+  const label = $('#copy-main-label');
+  const main = $('#copy-main');
+  const text = t(copyFormatTranslationKey(state.copyFormat));
+  if (label) label.textContent = text;
+  if (main) {
+    main.title = `Ctrl + Enter · ${text}`;
+    main.setAttribute('aria-label', text);
+  }
+  $$('#copy-menu [data-copy-format]').forEach((button) => {
+    button.setAttribute('aria-checked', String(button.dataset.copyFormat === state.copyFormat));
+  });
+}
+
+function closeCopyMenu() {
+  $('#copy-menu').classList.add('hidden');
+  $('#copy-menu-button').setAttribute('aria-expanded', 'false');
+}
+
+function setCopyFormat(format) {
+  if (!copyFormats.has(format)) return;
+  state.copyFormat = format;
+  localStorage.setItem('formula-editor.copy-format', format);
+  updateCopyAction();
+  closeCopyMenu();
+}
+
 function applyLanguage() {
   document.documentElement.lang = state.language;
-  document.title = `${t('appTitle')} · Excalidraw Manager`;
+  document.title = params.get('native') === '1' ? t('paletteTitle') : `${t('appTitle')} · Excalidraw Manager`;
   $$('#language-select option').forEach((option) => { option.selected = option.value === state.language; });
   $$('[data-i18n]').forEach((element) => {
     const value = t(element.dataset.i18n);
@@ -274,6 +319,7 @@ function applyLanguage() {
     const value = t(element.dataset.i18nAriaLabel);
     if (value) element.setAttribute('aria-label', value);
   });
+  updateCopyAction();
   populateTools();
   renderCommandSuggestions();
   updateThemeButton();
@@ -339,9 +385,9 @@ function positionQuickPopover() {
   const preferredLeft = triggerRect.left - panelRect.left;
   const maxLeft = Math.max(margin, panel.clientWidth - popover.offsetWidth - margin);
   popover.style.left = `${Math.max(margin, Math.min(preferredLeft, maxLeft))}px`;
-  // Wrapped category buttons may occupy more than one row. Always open below
-  // the complete group so the popover never covers a later row.
-  popover.style.top = `${groupsRect.bottom - panelRect.top + 6}px`;
+  // Anchor below the complete category strip. Compact mode deliberately keeps
+  // all ten triggers on this single row so the pointer path stays unobstructed.
+  popover.style.top = `${groupsRect.bottom - panelRect.top + 2}px`;
 }
 
 function closeQuickGroup({ returnFocus = false } = {}) {
@@ -403,7 +449,7 @@ function openQuickGroup(group, trigger, { pinned = false, focusFirst = false } =
 function scheduleQuickGroupClose() {
   clearQuickCloseTimer();
   if (state.quickGroupPinned) return;
-  state.quickCloseTimer = setTimeout(() => closeQuickGroup(), 140);
+  state.quickCloseTimer = setTimeout(() => closeQuickGroup(), 280);
 }
 
 function populateTools() {
@@ -894,6 +940,42 @@ async function copySvg() {
   }
 }
 
+async function copyPng() {
+  try {
+    if (!cleanLatex(source.value)) return showToast(t('emptyFormula'), true), false;
+    if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+      throw new Error(t('imageClipboardUnavailable'));
+    }
+    clearTimeout(state.renderTimer);
+    await renderFormula();
+    if (!requireSvg()) return false;
+    const blob = await svgToRasterBlob('image/png');
+    if (!blob) return false;
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    showToast(t('copiedPng'));
+    return true;
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || t('copyFailed'), true);
+    return false;
+  }
+}
+
+async function copySelectedFormat() {
+  if (state.copyFormat === 'svg') return copySvg();
+  if (state.copyFormat === 'png') return copyPng();
+  try {
+    if (!cleanLatex(source.value)) return showToast(t('emptyFormula'), true), false;
+    await writeText(formatValue(state.copyFormat));
+    showToast(t('copied'));
+    return true;
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || t('copyFailed'), true);
+    return false;
+  }
+}
+
 function validBoardUrl(raw) {
   if (!raw) return null;
   try {
@@ -1210,7 +1292,7 @@ function bindEvents() {
       event.preventDefault();
       event.stopPropagation();
       hideCommandSuggestions();
-      copySvg();
+      copySelectedFormat();
       return;
     }
     const plainSuggestionKey = !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
@@ -1286,17 +1368,32 @@ function bindEvents() {
   $('#copy-code').addEventListener('click', async () => {
     try { await writeText(codeValue.value); showToast(t('copied')); } catch (error) { showToast(error.message, true); }
   });
-  $('#copy-svg').addEventListener('click', copySvg);
+  $('#copy-main').addEventListener('click', copySelectedFormat);
+  $('#copy-menu-button').addEventListener('click', (event) => {
+    event.stopPropagation();
+    $('#download-menu').classList.add('hidden');
+    $('#download-menu-button').setAttribute('aria-expanded', 'false');
+    const menu = $('#copy-menu');
+    const open = menu.classList.contains('hidden');
+    menu.classList.toggle('hidden', !open);
+    event.currentTarget.setAttribute('aria-expanded', String(open));
+  });
+  $$('[data-copy-format]').forEach((button) => button.addEventListener('click', () => setCopyFormat(button.dataset.copyFormat)));
   $('#capture-ocr').addEventListener('click', captureAndRecognize);
   $('#download-main').addEventListener('click', () => download('svg'));
   $('#download-menu-button').addEventListener('click', (event) => {
     event.stopPropagation();
+    closeCopyMenu();
     const menu = $('#download-menu');
     menu.classList.toggle('hidden');
     event.currentTarget.setAttribute('aria-expanded', String(!menu.classList.contains('hidden')));
   });
   $$('[data-download]').forEach((button) => button.addEventListener('click', () => { $('#download-menu').classList.add('hidden'); download(button.dataset.download); }));
-  document.addEventListener('click', () => $('#download-menu').classList.add('hidden'));
+  document.addEventListener('click', () => {
+    closeCopyMenu();
+    $('#download-menu').classList.add('hidden');
+    $('#download-menu-button').setAttribute('aria-expanded', 'false');
+  });
   $('#board-button').addEventListener('click', copyAndOpenBoard);
   $('[data-file-trigger="image"]').addEventListener('click', (event) => { event.stopPropagation(); $('#image-input').click(); });
   $('#image-input').addEventListener('change', (event) => stageImage(event.target.files[0]));
@@ -1333,8 +1430,8 @@ function bindEvents() {
       captureAndRecognize();
       return;
     }
-    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && state.compact) { event.preventDefault(); copySvg(); }
-    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'c') { event.preventDefault(); copySvg(); }
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && state.compact) { event.preventDefault(); copySelectedFormat(); }
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelectedFormat(); }
   });
   addEventListener('message', (event) => {
     if (!state.compact || !state.boardUrl || window.parent === window
